@@ -1,0 +1,49 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: yes
+  roles:
+    - role: mailer
+
+  post_tasks:
+    - name: Terminating created resources
+      include_tasks: ../../tasks/aws-ses/terminations.yml
+      loop: "{{ provisions }}"
+
+    - name: Terminating created resources
+      include_tasks: ../../tasks/aws-ses/after-termination.yml
+
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    provider: aws
+    is_docker_guest: yes
+    region: eu-central-1
+    domain: ezploy.eu
+    hosted_zone_id: Z29S2FHXE4IGW6
+    providers:
+      aws:
+        access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+        secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+        token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+
+    provisions:
+      - id: service-mailer-ses-mailer
+        provision_params:
+          name: mailer1
+          inbound: true
+          domain: ezploy.eu
+          faults: faults@ezploy.eu
+          deliveries: deliveries@ezploy.eu
+          complaints: complaints@ezploy.eu
+          emails:
+            - fotis@ezploy.eu
+
+    modifications: []
+    terminations: []

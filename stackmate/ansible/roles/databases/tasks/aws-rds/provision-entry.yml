@@ -1,0 +1,61 @@
+---
+- name: Creating a database parameter group
+  delegate_to: localhost
+  rds_param_group:
+    state: present
+    name: "{{ dbentry | rds_param_group_name(stage) }}"
+    description: "Stackmate parameter group for {{ dbentry | rds_engine(stage) }} {{ dbentry.provision_params.version }}"
+    engine: "{{ dbentry | rds_param_group_family(stage) }}"
+    region: "{{ dbentry.provision_params.region | default(region) }}"
+    tags:
+      Environment: "{{ stage }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+
+- name: Deploying new and modifying existing RDS instances (this will take a while)
+  delegate_to: localhost
+  rds_instance:
+    allocated_storage: "{{ dbentry.provision_params.storage }}"
+    storage_type: "{{ storage_type }}"
+    allow_major_version_upgrade: no
+    auto_minor_version_upgrade: yes
+    backup_retention_period: 90
+    copy_tags_to_snapshot: yes
+    db_instance_class: "{{ dbentry.provision_params.size }}"
+    db_cluster_identifier: "{{ dbentry | rds_cluster_name }}"
+    db_instance_identifier: "{{ dbentry.provision_params.name }}"
+    db_parameter_group_name: "{{ dbentry | rds_param_group_name(stage) }}"
+    db_subnet_group_name: "{{ rds_subnet_group_name }}"
+    vpc_security_group_ids:
+      - "{{ default_sg.group_id }}"
+      - "{{ stackmate_sg.group_id }}"
+      - "{{ databases_sg.group_id }}"
+    engine: "{{ dbentry | rds_engine(stage) }}"
+    engine_version: "{{ dbentry.provision_params.version }}"
+    master_username: "{{ dbentry.provision_params.root_credentials.username }}"
+    master_user_password: "{{ dbentry.provision_params.root_credentials.password }}"
+    port: "{{ dbentry.provision_params.port }}"
+    publicly_accessible: yes
+    region: "{{ dbentry.provision_params.region | default(region) }}"
+    state: present
+    tags:
+      Environment: "{{ stage }}"
+      Group: "{{ dbentry.group }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    wait: yes
+  register: deployed_output
+
+- name: Creating MySQL users & databases
+  import_tasks: mysql-users-databases.yml
+  when: dbentry.provision_params.get('engine') == 'mysql'
+
+- name: Creating PostgreSQL users & databases
+  import_tasks: postgresql-users-databases.yml
+  when: dbentry.provision_params.get('engine') == 'postgres'
+
+- name: Gathering facts about the deployed instances
+  set_fact:
+    rds_instances: "{{ rds_instances | default([]) + [deployed_output] }}"

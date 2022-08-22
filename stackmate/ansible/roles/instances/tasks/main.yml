@@ -1,0 +1,40 @@
+---
+- name: Setting the provisionable targets
+  set_fact:
+    provision_items: "{{ provisions | default([]) + modifications | default([]) }}"
+    provision_results: []
+    termination_results: []
+    security_group_ids: []
+    terminatables_instances: "{{ terminations | default([]) | selectattr('resource_ids', 'defined') | list }}"
+
+- name: Provisioning your instances
+  block:
+    - name: Creating the keypair & allowing access to Stackmate.io
+      include_tasks: aws-ec2/before-provision.yml
+      register: prerequisites
+      when: provision_items | length > 0
+
+    - name: Launching & modifying the instances in AWS
+      include_tasks: aws-ec2/provisions.yml
+      loop: "{{ provision_items }}"
+
+    - name: Removing instances that are no longer needed
+      include_tasks: aws-ec2/terminations.yml
+      when: terminatables_instances | length > 0
+      loop: "{{ terminatables_instances }}"
+      loop_control:
+        loop_var: instance
+        index_var: idx
+      vars:
+        instance_ids: "{{ terminatables_instances | sum(attribute='resource_ids', start=[]) | list }}"
+
+    - name: Removing the keypair & Stackmate security group
+      include_tasks: aws-ec2/after-termination.yml
+      when: terminatables_instances | length > 0
+      register: after_termination
+
+    - name: Setting the state for Stackmate
+      set_fact:
+        stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_instances_state ] }}"
+      when: store_state
+  when: flavor == 'instances' and provider == 'aws'

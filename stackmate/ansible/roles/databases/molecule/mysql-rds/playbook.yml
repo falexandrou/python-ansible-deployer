@@ -1,0 +1,56 @@
+---
+# Default scenario is mysql + RDS
+- name: Converge
+  hosts: all
+  roles:
+    - role: databases
+
+  post_tasks:
+    - name: Storing output to a json file
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      delegate_to: localhost
+
+    - name: Terminating created resources
+      include_tasks: ../../tasks/aws-rds/terminations.yml
+      vars:
+        terminations: "{{ provisions }}"
+
+  vars:
+    vpc_id: vpc-09ebb623125812dd5
+    main_vpc_subnet_id: subnet-02eacc03ad59e4568
+    alternative_vpc_subnet_id: subnet-0e6064c08d80b3014
+    rds_subnet_group_name: test-rds-subnet-group
+    stage: molecule-test
+    provider: aws
+    flavor: instances
+    region: eu-central-1
+    # via the provision generator
+    provisions:
+      - id: service-mysql-mysql-database
+        group: databases
+        provision_params:
+          configfiles: []
+          kind: mysql
+          name: mysql-database
+          nodes: 1
+          port: 3306
+          provider: aws
+          root_credentials:
+            username: root_db_user
+            password: root_db_password
+          credentials:
+            username: myuser
+            password: mypassword
+          size: db.t2.micro
+          storage: 100
+          region: eu-central-1
+          version: 5.7
+          databases:
+            - stackmate
+          engine: mysql
+    modifications: []
+    terminations: []
+    unchanged: []

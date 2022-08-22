@@ -1,0 +1,71 @@
+---
+- name: Setting the security groups for the instance
+  set_fact:
+    instance_security_groups:
+      - "{{ application_sg.group_id }}"
+      - "{{ stackmate_sg.group_id }}"
+
+- name: Adding the application security group for the instance
+  set_fact:
+    instance_security_groups: "{{ instance_security_groups + [application_security_group] }}"
+    instance_name: "{{ item | get_idempotent_instance_name }}"
+    instance_image_id: "{{ ami_ids[distro][item.provision_params.region] }}"
+  when: item.group == 'application'
+
+- name: Deploying & modifying EC2 instances (this will take a while)
+  delegate_to: localhost
+  ec2_instance:
+    state: present
+    name: "{{ instance_name }}"
+    key_name: "{{ keypair_name }}"
+    vpc_subnet_id: "{{ main_vpc_subnet_id }}"
+    instance_type: "{{ item.provision_params.size }}"
+    user_data: "{{ lookup('template', 'user_data.sh.j2') }}"
+    instance_ids: "{{ item.get('resource_ids') | default([]) }}"
+    termination_protection: no
+    detailed_monitoring: yes
+    security_groups: "{{ instance_security_groups }}"
+    network:
+      assign_public_ip: yes
+    image_id: "{{ instance_image_id }}"
+    filters:
+      subnet-id: "{{ main_vpc_subnet_id }}"
+      instance-type: "{{ item.provision_params.size }}"
+      image-id: "{{ instance_image_id }}"
+      key-name: "{{ keypair_name }}"
+      instance-state-name: running
+      'tag:Name': "{{ instance_name }}"
+    volumes:
+      - device_name: /dev/sda1
+        ebs:
+          delete_on_termination: true
+          volume_size: "{{ item.provision_params.get('storage', 8) | default(8) | int }}"
+          volume_type: gp3
+    tags:
+      Name: "{{ instance_name }}"
+      Environment: "{{ stage }}"
+      Group: "{{ item.group }}"
+      ServiceName: "{{ item.provision_params.name }}"
+    region: "{{ item.provision_params.region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    wait: yes
+  register: deployed_instance
+
+- name: Adding the instance in the list of provisioned ones
+  set_fact:
+    provision_results: "{{ provision_results | default([]) + deployed_instance.instances }}"
+
+- name: Adding the instance to the hosts inventory
+  delegate_to: localhost
+  add_host:
+    hostname: "{{ instance.public_ip_address }}"
+    ansible_ssh_port: "{{ ssh_port }}"
+    groups:
+      - "{{ instance.tags.Group }}"
+      - provisionables
+  when: instance.get('public_ip_address')
+  loop: "{{ deployed_instance.instances }}"
+  loop_control:
+    loop_var: instance

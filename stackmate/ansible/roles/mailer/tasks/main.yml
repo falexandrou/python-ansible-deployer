@@ -1,0 +1,58 @@
+---
+- name: Setting the facts for the role
+  set_fact:
+    sns_bounce_topics: []
+    sns_complaints_topics: []
+    sns_deliveries_topics: []
+    ses_domains: []
+    ses_emails_list: []
+    verifications_list: []
+    dkims_list: []
+    mail_from_list: []
+    mailer_provisionables: "{{ provisions | default([]) + modifications | default([]) }}"
+
+- name: Provisioning SES
+  block:
+    - name: Creating the resources required for the Email service
+      include_tasks: aws-ses/before-provision.yml
+
+    - name: Provisioning AWS Simple Email Service
+      include_tasks: aws-ses/provisions.yml
+      loop: "{{ mailer_provisionables }}"
+  when: provider == 'aws' and (mailer_provisionables | length > 0)
+
+# provisioning postfix depends on smtp_credentials which is registerd
+# in the previous step, after the email service has been provisioned
+- name: Provisioning Postfix Mail Transfer agent
+  import_tasks: postfix/main.yml
+  become: yes
+  when: flavor == 'instances' and inventory_hostname in groups.get('provisionables', {}) and smtp_credentials is success and smtp_credentials.get('result')
+  vars:
+    smtp_server: "{{ smtp_credentials.result.server }}"
+    smtp_port: "{{ smtp_credentials.result.port }}"
+    smtp_username: "{{ smtp_credentials.result.username }}"
+    smtp_password: "{{ smtp_credentials.result.password }}"
+
+- name: Terminating unwanted SES services
+  block:
+    - name: Terminating redundant AWS Simple Email Services
+      include_tasks: aws-ses/terminations.yml
+      loop: "{{ terminations | default([]) }}"
+
+    - name: Creating the resources required for the Email service
+      include_tasks: aws-ses/after-termination.yml
+  when: provider == 'aws' and (terminations | default([]) | length > 0)
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_mailer_state ] }}"
+  when: provider == 'aws' and store_state
+
+- name: Setting the user action
+  set_fact:
+    pending_user_action: "{{ {'key': 'domain_validate_email', 'value': ses_emails.get('results', []) | map(attribute='email') | list } }}"
+
+- name: Setting the pending user actions for Stackmate
+  set_fact:
+    stackmate_user_action: "{{ stackmate_user_action | default([]) + [pending_user_action] }}"
+  when: provider == 'aws' and ses_emails is defined

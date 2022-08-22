@@ -1,0 +1,5 @@
+{% if commit.reference | length > 0 %}
+The current public release now refers to `{{ commit.reference }}`
+{% endif %}
+Message: `{{ commit.message | trim }}`
+View the detailed log at {{ operation_url }}

@@ -1,0 +1,107 @@
+---
+- name: Fetching information about the load balancer
+  delegate_to: localhost
+  elb_application_lb_info:
+    names: ["{{ item | elb_alb_name(elb_name_prefix) }}"]
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: current_load_balancers
+
+- name: Setting the current load balancer fact
+  set_fact:
+    current_alb: "{{ current_load_balancers.load_balancers | first }}"
+
+- name: Removing the Route53 entries for the load balancer
+  delegate_to: localhost
+  route53:
+    state: absent
+    type: "{{ rec.record_type }}"
+    hosted_zone_id: "{{ hosted_zone_id }}"
+    record: "{{ rec.record }}"
+    value: "{{ rec.value }}"
+    ttl: "{{ dns_records_ttl }}"
+    alias: "{{ rec.is_alias }}"
+    alias_hosted_zone_id: "{{ rec.hosted_zone_id | default(omit) }}"
+    wait: yes
+    overwrite: yes
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  loop: "{{ item | elb_alb_dns_records(current_alb) }}"
+  loop_control:
+    loop_var: rec
+  when: current_alb is defined and item.provision_params.get('domain') is defined
+  register: terminated_alb_records
+
+- name: Removing the Application load balancer
+  delegate_to: localhost
+  elb_application_lb:
+    name: "{{ item | elb_alb_name(elb_name_prefix) }}"
+    state: absent
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    wait: yes
+  register: terminated_loadbalancer
+
+- name: Removing the instances from the load balancer target group
+  delegate_to: localhost
+  elb_target:
+    target_group_name: "{{ item | elb_target_group_name(elb_target_group_prefix) }}"
+    target_id: "{{ instance_id }}"
+    state: absent
+    target_status: unused
+    target_status_timeout: 300
+    deregister_unused: yes
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  loop: "{{ item.provision_params.target_instances }}"
+  loop_control:
+    loop_var: instance_id
+
+- name: Removing the load balancer target group
+  delegate_to: localhost
+  elb_target_group:
+    name: "{{ item | elb_target_group_name(elb_target_group_prefix) }}"
+    protocol: http
+    port: 80
+    vpc_id: "{{ vpc_id }}"
+    state: absent
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  ignore_errors: "{{ ignore_target_registration_errors or False }}"
+  register: terminated_elb_tg
+
+- name: Checking the remaining load balancers
+  delegate_to: localhost
+  elb_application_lb_info:
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: remaining_elbs
+
+- name: Removing the security group for the load balancer
+  delegate_to: localhost
+  ec2_group:
+    name: "{{ elb_security_group_name }}"
+    description: Allow incoming connections to the load balancer
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: terminated_elb_sg
+  when: remaining_elbs.load_balancers | length == 0
+
+- name: Storing the created resources
+  set_fact:
+    termination_results: "{{ termination_results | default([]) + [terminated_loadbalancer] }}"
+    terminated_dns_records: "{{ terminated_dns_records | default([]) + terminated_alb_records.results }}"

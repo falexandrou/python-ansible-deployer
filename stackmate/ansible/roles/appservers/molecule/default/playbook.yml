@@ -1,0 +1,89 @@
+---
+- name: Converge
+  hosts: all
+  roles:
+    - role: appservers
+
+  pre_tasks:
+    # Populating a service to be terminated (daphne)
+    - name: Setting facts to be populated with provisions and terminations
+      set_fact:
+        provisionables: "{{ provisions | default([]) + modifications | default([]) }}"
+        pkg_installations: []
+
+    - name: Provisioning daphne which is to be removed
+      include_tasks: ../../tasks/appserver.yml
+      vars:
+        action: install
+        entry: "{{ terminations | first }}"
+        appserveremplatesdir: ../../templates
+
+    - name: Configuring the nginx website
+      include_tasks: ../../tasks/nginx.yml
+
+  post_tasks:
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    provider: aws
+    flavor: instances
+    deployment_path: /var/www/application
+    stage: production
+    domain: ezploy.eu
+    providers:
+      aws:
+        access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+        secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+        token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+
+    provisions:
+      - id: dependency-application-server-gunicorn
+        provision_params:
+          name: gunicorn
+          kind: gunicorn
+          appname: myapp.wsgi
+          port: 3000
+          uri: /
+          global: yes
+          enabled: yes
+          static:
+            - uri: /static
+              dir: static
+        group: application
+
+      - id: dependency-application-server-pm2
+        provision_params:
+          name: pm2
+          kind: pm2
+          port: 4000
+          global: yes
+          uri: /node-application
+        group: application
+
+      - id: dependency-application-server-puma
+        provision_params:
+          name: puma
+          kind: puma
+          port: 5000
+          global: no
+          uri: /
+        group: application
+
+    modifications: []
+
+    terminations:
+      - id: dependency-application-server-daphne
+        provision_params:
+          name: daphne
+          kind: daphne
+          global: no
+          port: 3100
+          uri: /channels
+          startcmd: "/usr/bin/daphne mysuperapp.asgi:application"
+        group: application

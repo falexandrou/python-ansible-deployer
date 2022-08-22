@@ -1,0 +1,22 @@
+---
+- name: Converge
+  hosts: all
+  roles:
+    - role: python
+
+  post_tasks:
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    flavor: instances
+    provisions:
+      - id: dependency-application-server-python
+        group: application
+        provision_params:
+          version: 3.7

@@ -1,0 +1,86 @@
+---
+- name: Populating the item config
+  set_fact:
+    itemcfg: "{{ item.provision_params.get('config') | ternary(item.provision_params.config, {}) }}"
+    servicename: "{{ item.provision_params.get('servicename') | ternary(item.provision_params.servicename, item.provision_params.kind) }}"
+
+- name: Populating the template service config
+  set_fact:
+    servicecfg:
+      name: "{{ servicename }}"
+      description: "{{ item.provision_params.get('description') | ternary(item.provision_params.description, 'Systemd service') }}"
+      after: "{{ itemcfg.get('after') | ternary(itemcfg.after, 'syslog.target network.target') }}"
+      requires: "{{ itemcfg.get('requires') | ternary(itemcfg.requires, 'syslog.target network.target') }}"
+      user: "{{ itemcfg.get('systemd_user') | ternary(itemcfg.systemd_user, 'stackmate') }}"
+      group: "{{ itemcfg.get('systemd_group') | ternary(itemcfg.systemd_group, 'stackmate') }}"
+      process_type: "{{ itemcfg.get('process_type') | ternary(itemcfg.process_type, 'simple') }}"
+      env_file: "{{ itemcfg.get('env_file') | ternary(itemcfg.env_file, '/etc/conf.d/systemd.env') }}"
+      kill_mode: "{{ itemcfg.get('kill_mode') | ternary(itemcfg.kill_mode, 'process') }}"
+      startcmd: "{{ item.provision_params.get('startcmd') }}"
+      stopcmd: "{{ item.provision_params.get('stopcmd') }}"
+      reloadcmd: "{{ item.provision_params.get('reloadcmd') }}"
+      environment: "{{ itemcfg.get('environment', {}) | default({}) | combine({'PATH': path_out.stdout}) }}"
+
+- name: Making sure the environment file directory exists
+  become: yes
+  file:
+    path: "{{ servicecfg.env_file | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Making sure the environment file exists
+  become: yes
+  file:
+    path: "{{ servicecfg.env_file }}"
+    state: touch
+    mode: "0644"
+
+- name: "Creating the {{ servicename }} systemd service file"
+  become: yes
+  template:
+    src: "{{ templatesdir }}/service.j2"
+    dest: "/etc/systemd/system/{{ servicename }}.service"
+  vars:
+    servicecfg: "{{ servicecfg }}"
+    servicename: "{{ servicename }}"
+  register: service_output
+
+- name: "Creating the {{ servicename }} systemd target file"
+  become: yes
+  template:
+    src: "{{ templatesdir }}/target.j2"
+    dest: "/etc/systemd/system/{{ servicename }}.target"
+  vars:
+    servicecfg: "{{ servicecfg }}"
+    servicename: "{{ servicename }}"
+  when: item.provision_params.get('target') | default(True)
+  register: target_output
+
+- name: "Creating the {{ servicename }} systemd socket file"
+  become: yes
+  template:
+    src: "{{ templatesdir }}/socket.j2"
+    dest: "/etc/systemd/system/{{ servicename }}.socket"
+  vars:
+    servicecfg: "{{ servicecfg }}"
+    servicename: "{{ servicename }}"
+  when: item.provision_params.socket | default(False)
+  register: socket_output
+
+- name: Storing the service output
+  set_fact:
+    provision_results: "{{ provision_results | default([]) + [output] }}"
+  loop:
+    - "{{ service_output }}"
+    - "{{ target_output }}"
+    - "{{ socket_output }}"
+  loop_control:
+    loop_var: output
+  when: output is defined and output is success
+
+- name: Enabling the {{ item.provision_params.kind }} service
+  systemd:
+    name: "{{ servicename }}"
+    state: "{{ 'started' if item.provision_params.get('started') else 'stopped' }}"
+    enabled: yes
+  when: item.provision_params.get('enabled', False)

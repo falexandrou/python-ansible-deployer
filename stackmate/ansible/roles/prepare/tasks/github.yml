@@ -1,0 +1,16 @@
+---
+# TODO: Wait until ansible fixes the broken github_deploy_key module
+# then use the following facts along with that module
+#
+# - name: Setting the fact for the repository components
+#   set_fact:
+#     repo_owner: "{{ repository | github_repository_parts(key='owner') }}"
+#     repo_name: "{{ repository | github_repository_parts(key='name') }}"
+
+- name: Adding an SSH key to GitHub
+  github_key:
+    name: "{{ github_deploy_key_name }}"
+    token: "{{ providers.github.token }}"
+    pubkey: '{{ public_key }}'
+    force: yes
+  register: github_deploy_key

@@ -1,0 +1,31 @@
+---
+- name: Unmounting the volumes
+  become: yes
+  mount:
+    path: "{{ volume.provision_params.mount }}"
+    backup: yes
+    state: absent
+  loop: "{{ terminations }}"
+  loop_control:
+    loop_var: volume
+  register: unmounted_filesystems
+
+- name: Terminating unwanted EFS filesystems
+  delegate_to: localhost
+  efs:
+    name: "{{ fs.provision_params.name }}"
+    state: absent
+    region: "{{ fs.provision_params.get('region') | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  when: termination_confirmed | bool
+  loop: "{{ terminations }}"
+  loop_control:
+    loop_var: fs
+  register: terminated_efs
+
+- name: Setting the facts
+  set_fact:
+    terminated_volumes: "{{ terminated_volumes | default([]) + terminated_efs.results }}"
+    terminated_mounts: "{{ terminated_mounts | default([]) + unmounted_filesystems.results }}"

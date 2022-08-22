@@ -1,0 +1,112 @@
+---
+- name: Setting the version
+  set_fact:
+    version: "{{ prov.provision_params.version | default(default_ruby_version) | string }}"
+    bundler_version: "{{ prov.provision_params.bundler | default(default_bundler_version) | string }}"
+
+- name: Checking for existing RVM installation
+  stat:
+    path: "{{ rvm_binary }}"
+  register: existing_rvm
+
+- name: Uninstalling System Ruby
+  become: yes
+  apt:
+    name: ruby
+    state: absent
+    purge: yes
+  when: ansible_distribution.lower() == 'ubuntu'
+  register: uninstall_system_ruby
+  until: uninstall_system_ruby is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Downloading the RVM installer
+  get_url:
+    url: "{{ rvm_installer_url }}"
+    dest: "{{ rvm_installer_path }}"
+    mode: 0755
+  when: not existing_rvm.stat.exists
+
+- name: Downloading GPG keys from rvm.io
+  get_url:
+    url: "https://rvm.io/{{ item }}"
+    dest: "/tmp/{{ item }}"
+  loop:
+    - mpapis.asc
+    - pkuczynski.asc
+  register: gpg_keys
+  when: not existing_rvm.stat.exists
+
+- name: Importing GPG keys
+  command: "gpg --import /tmp/{{ item }}"
+  loop:
+    - mpapis.asc
+    - pkuczynski.asc
+  ignore_errors: true
+  register: gpg_keys_import
+  changed_when: gpg_keys_import.rc == 0
+  when: not existing_rvm.stat.exists
+
+- name: Installing RVM
+  command: "{{ rvm_installer_path }} stable --path {{ rvm_install_dir }} --auto-dotfiles --user-install"
+  register: rvm_installation
+  changed_when: rvm_installation.rc == 0
+  when: not existing_rvm.stat.exists
+
+- name: Updating existing RVM
+  command: "{{ rvm_binary }} get stable --auto"
+  register: update_rvm
+  changed_when: update_rvm.rc == 0
+  when: existing_rvm.stat.exists
+
+- name: Installing ruby via RVM
+  command: "{{ rvm_binary }} install {{ version }}"
+  register: ruby_installation
+  changed_when: ruby_installation.rc == 0
+  # there's a hidden apt-get inside RVM, we must be able to mitigate apt locks
+  until: ruby_installation is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Installing ruby interface to databases
+  become: yes
+  apt:
+    name: "{{ ruby_apt_packages }}"
+    state: present
+    update_cache: yes
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+  register: python_database_drivers
+  until: python_database_drivers is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Setting ruby {{ version }} as default
+  command: "{{ rvm_binary }} alias create default {{ version }}"
+  register: rvm_default_ruby
+  changed_when: rvm_default_ruby.rc == 0
+
+- name: Updating system gems
+  shell: . $({{ rvm_binary }} default do rvm env --path) && gem update --system
+  register: system_gems_update
+  changed_when: system_gems_update.rc == 0
+
+- name: Installing bundler
+  shell: "{{ rvm_binary }} @global do gem install bundler --force -v '={{ bundler_version | default(bundler) }}'"
+  register: bundler_installation
+  changed_when: bundler_installation.rc == 0
+  when: bundler_version is defined
+  tags:
+    - skip_ansible_lint
+
+- name: Installing additional gems
+  shell: . $({{ rvm_binary }} default do rvm env --path) && gem install {{ ruby_global_packages | join(' ') }} --no-user-install
+  register: ruby_global_gems_installation
+  changed_when: ruby_global_gems_installation.rc == 0
+  when: ruby_global_packages | length > 0

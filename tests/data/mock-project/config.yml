@@ -1,0 +1,287 @@
+---
+# Stackmate project configuration
+#
+# Read the docs at https://stackmate.io/cli/docs
+#
+# Your project type, valid options are: django, flask, rails, wordpress, gatsby.js
+#
+# More info at https://stackmate.io/cli/docs/configuration#type
+framework: rails
+
+# The repository's git url
+repository: git@github.com:stackmate-io/stackmate-cli.git
+
+# The service provider aliases and their credentials,
+# are stored in your home directory, under `.stackmate/providers.yml`
+#
+# For example: `/home/masteryoda/.stackmate/providers.yml`
+#
+# More info at https://stackmate.io/cli/docs/configuration#providers
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+  github:
+    access_key: "{{ lookup('env', 'STACKMATE_GITHUB_ID') }}"
+    secret: "{{ lookup('env', 'STACKMATE_GITHUB_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_GITHUB_TOKEN') }}"
+  slack:
+    secret: "{{ lookup('env', 'STACKMATE_SLACK_TOKEN') }}"
+  email:
+    host: smtp.sendgrid.net
+    port: 587
+    access_key: apikey
+    secret: "{{ lookup('env', 'STACKMATE_SENDGRID_TOKEN') }}"
+  # Enter the aliases of the providers found in your `.stackmate/providers.yml` file
+  # in key: value format
+  #
+  # Example:
+  # aws: company-aws-account-1
+  # email: company-email-2
+  # slack: company-slack-3
+
+# The cloud provider for the project
+provider: aws
+
+# The region to deploy to
+region: eu-central-1
+
+production: &default_environment
+  # The branch to deploy
+  branch: master
+  # The domain we need to deploy to.
+  # Change that to your application's domain name
+  domain: stackmate-cli-master.stackmate.io
+
+  # The user to deploy with. This user is going to be created in the app & worker servers
+  #
+  # More info at https://stackmate.io/cli/docs/configuration#user
+  user: stackmate
+
+  # The root path to deploy to
+  #
+  # More info at https://stackmate.io/cli/docs/configuration#documentroot
+  documentroot: /var/www/stackmate-cli
+
+  # SSL Certificates:
+  #
+  # By default we're using letsencrypt for SSL certificates
+  # However, you can use the following structure to define custom ssl certificate
+  # ssl:
+  #     body: absolute path of certificate body in PEM format
+  #     key: absolute path of certificate's private key in PEM format
+  #     chain: absolute path of certificate chain in PEM format
+  #
+  # More info at https://stackmate.io/cli/docs/configuration#ssl-certificates
+  ssl:
+    generate: true
+    domains:
+      - ezploy.eu
+
+  # Environment variables
+  environment:
+    RAILS_ENV: production
+
+  # Configuration files
+  #
+  # Add the configuration files in a source, target pair.
+  # Example:
+  #   - source: production.rb
+  #     target: app/config/production.rb
+  #
+  # Make sure you only use the file name (ie. production.rb, database.yml and so on)
+  #
+  # The actual configuration files can be found in your user's home directory under
+  #   .stackmate/stackmate-cli/master/database.yml or
+  #   .stackmate/stackmate-cli/master/settings.py
+  #
+  # More info at https://stackmate.io/cli/docs/configuration#configuration-files
+  configfiles:
+    - source: configuration-files/database.yml
+      target: config/database.yml
+      application: true
+    - source: configuration-files/cable.yml
+      target: config/cable.yml
+      application: true
+
+  # Define pipelines to use during deployments or rollbacks
+  # Add a list of tasks to be executed sequentially
+  #
+  # More info at https://stackmate.io/cli/docs/configuration#pipelines
+  pipeline:
+    db:seed:
+      - bundle exec rails db:seed
+    test:
+      - bundle exec rspec
+    build:
+      - yarn
+      - bundle exec rails assets:precompile
+    db:migrate:
+      - bundle exec rails db:migrate
+    db:rollback:
+      - bundle exec rails db:rollback
+    # The names in the restart & reload entries should correspond
+    # to the names of the services
+    restart:
+      - resque
+      - sidekiq
+      - puma
+      # - celery
+      # - daphne
+      # - ....
+    after:
+      reload:
+        - nginx
+
+  # Static files that should be synced to an elasticstorage bucket
+  statics:
+    - source: static
+      bucket: anotherpublicbucket
+
+  # Services describes your infrastructure and how you want it to be set up.
+  #
+  # Keep in mind, there are certain services that are required per project type
+  # Also, each service group has specific options that are available, so please make sure
+  # that you read our documentation.
+  #
+  # If however you don't want to read the docs, we provide a hosted version at https://stackmate.io
+  # that generates all of this configuration manually and you can tweak without writing code.
+  #
+  # More info at https://stackmate.io/cli/docs/configuration#services
+  services:
+    # Example application instances group
+    #
+    # - name: some-application
+    #   type: application
+    #   size: t2.xlarge
+    #   nodes: 5
+    #   configfiles:
+    #     - source: production.nginx.conf
+    #       target: /etc/nginx/sites-enabled/stackmate.io.conf
+    #   dependencies:
+    #     - type: nginx
+    #       version: 1.1.17
+    #     - type: puma
+    #       version: 4.0.2
+    #
+    # Example database instance
+    #
+    # - name: database-service
+    #   type: mysql
+    #   version: 5.7
+    - name: mysql-database
+      type: mysql
+      version: 5.7
+      size: db.t2.micro
+      storage: 100
+      databases:
+        - stackmate
+      environment:
+        DATABASE_MAIN_URL: 'mysql://{{username}}:{{password}}@{{host}}:{{port}}/stackmate'
+
+    - name: memcached
+      type: memcached
+      size: cache.t2.micro
+      environment:
+        CACHE_URL: 'tcp://{{host}}:{{port}}'
+
+    - name: application-server
+      type: application
+      size: t2.micro
+      nodes: 2
+      links:
+        - memcached
+        - mysql
+      reference: 'service-10'
+      dependencies:
+        - type: nginx
+          configfiles:
+            - source: configuration-files/nginx.conf
+              target: nginx.conf
+        - type: puma
+        - type: sidekiq
+        - type: resque
+        - type: ruby
+          version: 2.6.4
+      storage: 10
+      environment:
+        SERVER_{{index}}_IP: 'https://{{host}}:{{port}}'
+
+    - name: app-cdn
+      type: cdn
+      reference: 'service-11'
+      origins:
+        - path: /assets/js
+          domain: ezploy.eu
+          aliases:
+            - cdn.ezploy.eu
+      environment:
+        CDN_URL: '{{host}}'
+
+    - name: mailer
+      type: mailer
+      inbound: true
+      faults: faults@ezploy.eu
+      deliveries: deliveries@ezploy.eu
+      reference: 'service-12'
+      environment:
+        SMTP_HOST: '{{host}}'
+        SMTP_PORT: '{{port}}'
+        SMTP_USERNAME: '{{username}}'
+        SMTP_PASSWORD: '{{password}}'
+
+    - type: elasticstorage
+      name: anotherpublicbucket
+      public: true
+      cdn: true
+      domain: assets.ezploy.eu
+      contents: build/dist
+      reference: 'service-13'
+      environment:
+        STORAGE_URL: 'https://{{host}}/some-bucket'
+
+    - type: volumes
+      name: root-volume
+      mount: /opt/shared-media
+      reference: 'service-14'
+      groups:
+        - application
+        - workers
+
+  # Cron jobs that need to be running
+  #
+  # Depending on your setup, the cron jobs are running either
+  # - on the main app server,
+  # - on all of the servers in the `worker` group
+  #
+  # More info at https://stackmate.io/cli/docs/configuration#crons
+  jobschedules:
+    # Example:
+    #
+    # - command: bundle exec rake sometask --some=option
+    #   # IMPORTANT: make sure you wrap the frequency in quotes, otherwise the file doesn't get parsed
+    #   frequency: '*/1 * * * * *'
+    #   # Optional: If you specify the branches key, the cron jobs will be set only for those specific branches
+    #   branches:
+    #     - master
+    - command: /bin/true
+      frequency: '*/1 * * * *'
+    - command: /bin/false
+      frequency: '*/5 * * * *'
+
+# Add providers to use when sending out notifications
+#
+# Each entry here should have a corresponding provider entry
+#
+# More info at https://stackmate.io/cli/docs/configuration#notifications
+notifications:
+  # Enable any notifications that you want to be triggered when deployments start or finish
+  #
+  # More info at https://stackmate.io/cli/docs/configuration#notifications
+  - type: email
+    targets:
+      - stackmateuser@mailinator.com
+
+  - type: slack
+    targets:
+      - deployments-channel

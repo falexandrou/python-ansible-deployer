@@ -1,0 +1,63 @@
+---
+- name: Removing existing credentials
+  delegate_to: localhost
+  stackmate_aws_remove_access_keys:
+    iam_user: "{{ storage_username | get_storage_username(domain) }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+
+- name: Creating an IAM user to be used for storage
+  delegate_to: localhost
+  iam:
+    iam_type: user
+    state: present
+    access_key_state: create
+    key_count: 1
+    name: "{{ storage_username | get_storage_username(domain) }}"
+    region: "{{ region }}"
+    update_password: always
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: storage_user
+
+- name: Granting S3 access to the IAM user
+  delegate_to: localhost
+  iam_policy:
+    iam_type: user
+    iam_name: "{{ storage_username | get_storage_username(domain) }}"
+    state: present
+    policy_name: "{{ domain | iam_policy_name }}"
+    policy_json: "{{ lookup( 'template', 'iam_policy.json.j2') }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: iam_user_policy
+  when: storage_user is changed
+
+- name: Pausing so that the IAM user becomes available
+  pause:
+    seconds: 5
+  when: storage_user is changed
+
+- name: Fetching the information for the created IAM user
+  delegate_to: localhost
+  stackmate_aws_iam_user:
+    name: "{{ storage_username | get_storage_username(domain) }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: iam_user
+
+- name: Setting the credentials fact
+  set_fact:
+    storage_user_creds: "{{ storage_user.user_meta.access_keys | first | default({}) }}"
+  when: storage_user is changed
+
+- name: Setting the generated credentials
+  set_fact:
+    stackmate_generated_credentials: "{{ stackmate_generated_credentials | default([]) + [{'elasticstorage': {'iam': storage_user_creds }}] }}"
+  when: storage_user_creds is defined

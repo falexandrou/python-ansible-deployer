@@ -1,0 +1,84 @@
+---
+- name: Setting the ports to enable connections for
+  set_fact:
+    cache_ports: "{{ cache_provision_items | map(attribute='provision_params') | map(attribute='port') | list }}"
+
+# Creating the security group to be attached to new instances
+- name: Getting the IP for Stackmate.io
+  delegate_to: localhost
+  command: 'dig -4 TXT +short o-o.myaddr.l.google.com @ns1.google.com'
+  register: stackmate_ip
+  no_log: yes
+  when: true
+
+- name: Setting up the security group to allow access to Stackmate
+  delegate_to: localhost
+  ec2_group:
+    name: "{{ stackmate_security_group }}"
+    description: Allow SSH access to Stackmate
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    purge_rules: yes
+    rules:
+      - proto: tcp
+        ports: "{{ cache_ports }}"
+        cidr_ip: "{{ stackmate_ip.stdout | replace('\"', '') }}/32"
+        rule_desc: Allow SSH access to Stackmate
+    tags:
+      Name: "{{ stackmate_security_group }}"
+  register: stackmate_sg
+  when: stackmate_ip is success
+  tags:
+    - stackmate-enabler
+
+- name: Determining the VPC CIDR to use
+  delegate_to: localhost
+  ec2_vpc_net_info:
+    vpc_ids: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: vpc_info
+
+- name: Fetching the default security group
+  delegate_to: localhost
+  ec2_group_info:
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    filters:
+      group-name: default
+      vpc-id: "{{ vpc_id }}"
+  register: default_sg_info
+
+- name: Setting the VPC CIDR & default security group
+  set_fact:
+    vpc_info: "{{ vpc_info.vpcs | first }}"
+    default_sg: "{{ default_sg_info.security_groups | first }}"
+
+- name: Creating the security group for the cache instances
+  delegate_to: localhost
+  ec2_group:
+    name: "{{ cache_security_group }}"
+    description: Allow incoming connections to the cache instances from within the VPC
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    purge_rules: yes
+    purge_tags: yes
+    # inbound rules, by default, all outbound traffic is allowed
+    rules:
+      - proto: all
+        ports: "{{ cache_ports }}"
+        cidr_ip: "{{ vpc_info.cidr_block }}"
+        rule_desc: VPC incoming connections
+    tags:
+      Name: "{{ cache_security_group }}"
+  register: caches_sg

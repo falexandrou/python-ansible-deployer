@@ -1,0 +1,45 @@
+---
+# Default scenario is mysql + RDS
+- name: Converge
+  hosts: all
+  roles:
+    - role: caches
+
+  post_tasks:
+    - name: Terminating created resources
+      include_tasks: ../../tasks/aws-elasticache/terminations.yml
+      loop: "{{ provisions }}"
+
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    vpc_id: vpc-09ebb623125812dd5
+    main_vpc_subnet_id: subnet-02eacc03ad59e4568
+    alternative_vpc_subnet_id: subnet-0e6064c08d80b3014
+    elasticache_subnet_group_name: test-elasticache-subnet-group
+    stage: molecule-test
+    provider: aws
+    flavor: instances
+    region: eu-central-1
+    # via the provision generator
+    provisions:
+      - id: service-caches-cache-cluster
+        group: caches
+        provision_params:
+          kind: memcached
+          name: memcached-cluster
+          nodes: 1
+          port: 11211
+          provider: aws
+          size: cache.t2.micro
+          region: eu-central-1
+          version: 1.5.16
+    modifications: []
+    terminations: []
+    unchanged: []

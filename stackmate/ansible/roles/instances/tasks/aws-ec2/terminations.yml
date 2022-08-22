@@ -1,0 +1,20 @@
+---
+- name: Terminating instances that are no longer needed
+  delegate_to: localhost
+  ec2_instance:
+    state: terminated
+    region: "{{ instances.provision_params.region | default(region) }}"
+    name: "{{ instance.provision_params.name }}"
+    instance_ids: "{{ instance_ids }}"
+    vpc_subnet_id: "{{ main_vpc_subnet_id }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    wait: yes
+  when: instance_ids | length > 0
+  register: terminated_instance
+
+- name: Adding the instance in the list of terminated ones
+  set_fact:
+    termination_results: "{{ termination_results | default([]) + terminated_instance.get('instances') | default([]) }}"
+  when: terminated_instance is changed

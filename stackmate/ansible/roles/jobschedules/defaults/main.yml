@@ -1,0 +1,14 @@
+provider:
+domain:
+stage:
+region:
+flavor: instances
+deployment_path: /var/www/application
+deployment_user: stackmate
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+store_state: yes
+crons_run_once: false

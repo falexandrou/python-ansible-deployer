@@ -1,0 +1,5 @@
+{% if entry.provision_params.kind == 'celery' %}
+{{celery_executable.stdout}} multi restart ${CELERYD_NODES} -A {{ entry.provision_params.get('appname') }} --pidfile=${CELERYBEAT_PID_FILE} --logfile=${CELERYD_LOG_FILE} --loglevel=${CELERYD_LOG_LEVEL} ${CELERYD_OPTS}
+{% else %}
+/usr/bin/kill -s HUP $MAINPID
+{% endif %}

@@ -1,0 +1,25 @@
+---
+default_ruby_version: 2.7.2
+default_bundler_version: 2.2.6
+flavor: instances
+deployment_user: stackmate
+store_state: yes
+
+apt_lock_retries: 30
+apt_lock_delay: 10
+apt_cache_timeout: 7200
+rvm_installer_url: "https://raw.githubusercontent.com/rvm/rvm/master/binscripts/rvm-installer"
+rvm_installer_path: "/tmp/rvm-installer.sh"
+rvm_install_dir: "~/.rvm"
+
+# gems that are globally available
+ruby_global_packages:
+  - executable-hooks
+  - backports
+  - multi_json
+
+ruby_apt_packages:
+  - ruby-mysql2
+  - ruby-pg
+  - ruby-sqlite3
+  - ruby-dataobjects-sqlite3

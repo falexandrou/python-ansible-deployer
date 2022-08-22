@@ -1,0 +1,26 @@
+# File generated and managed by Stackmate.io
+#
+# To enable the service, run the following command:
+#   systemctl enable {{ servicecfg.name }}
+#
+# To disable the service run the following command:
+#   systemctl enable {{ servicecfg.name }}
+#
+[Unit]
+Description={{ servicecfg.description }}
+Requires=multi-user.target
+Wants={{ servicecfg.name }}.service
+After={{ servicecfg.after }}
+AllowIsolate=yes
+
+
+[Unit]
+Description={{ servicecfg.description }}
+
+[Socket]
+ListenStream=/var/run/{{ servicecfg.name }}.sock
+User={{ servicecfg.user }}
+Group={{ servicecfg.group }}
+
+[Install]
+WantedBy=sockets.target

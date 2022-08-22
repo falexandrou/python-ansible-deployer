@@ -1,0 +1,37 @@
+---
+- name: Setting the provision items
+  set_fact:
+    provision_items: "{{ provisions | default([]) + modifications | default([]) }}"
+
+- name: Importing variables according to the distribution
+  include_vars: "{{ ansible_distribution | lower }}.yml"
+  when: groups is defined and inventory_hostname in groups.get('provisionables', {})
+
+- name: Installing client libraries on your application servers
+  import_tasks: provision-clients.yml
+  when: groups is defined and inventory_hostname in groups.get('provisionables', {})
+
+- name: Provisioning the RDS instances
+  block:
+    - name: Creating the resources required for the RDS instances
+      import_tasks: aws-rds/before-provision.yml
+      when: provision_items | length > 0
+
+    - name: Provisioning your databases on AWS
+      import_tasks: aws-rds/provisions.yml
+      when: provision_items | length > 0
+
+    - name: Terminating the RDS resources that are no longer required
+      import_tasks: aws-rds/terminations.yml
+      when: terminations | length > 0
+
+    - name: Setting the state for Stackmate
+      set_fact:
+        stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_databases_state ] }}"
+      when: store_state
+  when: provider == 'aws'
+
+# TODO
+# - name: Installing database servers on your instances
+#   import_tasks: provision-servers.yml
+#   when: provider is None

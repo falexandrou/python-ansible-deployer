@@ -1,0 +1,96 @@
+{% for item in provisionables %}
+upstream {{ item.provision_params.kind | upstream_name }} {
+    server {{ item | upstream_endpoint(default_port=default_ports[item.provision_params.kind]) }} max_fails=3 fail_timeout=30s;
+}
+
+    {%- for redirect in item.provision_params.get('domain') | default(domain) | server_redirects %}
+server {
+  listen 80;
+  server_name {{redirect }};
+  return 301 https://{{ item.provision_params.get('domain') | primary_domain_name }}$request_uri;
+}
+
+
+    {%- endfor %}
+
+{% endfor %}
+
+server {
+    # server configuration
+    listen [::]:80 ipv6only=on;
+    listen 80;
+
+    server_name {{ domain | nginx_domain_names | sort | join(' ') }};
+    try_files $request_uri/index.html $request_uri {{ provisionables | nginx_locations | join(' ') }};
+    keepalive_timeout 5;
+
+    if ($http_x_forwarded_proto != 'https') {
+        return 301 https://$host$request_uri;
+    }
+
+    # headers configuration
+    add_header Strict-Transport-Security "max-age=63072000; includeSubdomains; preload";
+
+    # document root - managed by Stackmate
+    root {{ public_release_path }};
+
+    # log paths - managed by Stackmate
+    access_log /var/log/nginx/{{ domain }}.access.log;
+    error_log /var/log/nginx/{{ domain }}.error.log;
+
+    proxy_redirect off;
+    proxy_http_version 1.1;
+
+    proxy_set_header Host $host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header X-NginX-Proxy true;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Deployed-By "stackmate.io";
+
+    # Set security headers
+    add_header X-Frame-Options SAMEORIGIN;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1;mode=block";
+
+    # cache static files as much as possible
+    location ^~ \.(ico|css|gif|jpe?g|png|js)(\?[0-9]+)?$ {
+        gzip_static on;
+        expires max;
+        break;
+    }
+
+    {% if domain.endswith(preview_domain) %}
+    location = /robots.txt {
+        add_header Content-Type text/plain;
+        return 200 "User-agent: *\nDisallow: /\n";
+    }
+    {%- endif %}
+
+    {% for item in provisionables %}
+        {%- if item.provision_params.get('static') %}
+            {% for static in item.provision_params.static %}
+
+    location ^~ {{ static.uri }} {
+        root {{ public_release_path }}/{{ static.dir }};
+        add_header Cache-Control public;
+        gzip_static on;
+        expires max;
+        aio threads;
+    }
+            {% endfor %}
+        {%- endif %}
+    {%- endfor %}
+
+    {%- for item in provisionables %}
+
+    # {{ item.provision_params.kind }} server configuration - Managed by Stackmate
+    location {{ item | nginx_location_name }} {
+        proxy_pass http://{{ item.provision_params.kind | upstream_name }};
+        aio threads;
+    }
+    {% endfor %}
+
+}

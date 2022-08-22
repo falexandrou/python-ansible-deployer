@@ -1,0 +1,181 @@
+---
+- name: Converge
+  hosts: all
+  roles:
+    - role: project
+
+  pre_tasks:
+    - name: Creating an S3 bucket to sync static files to
+      include_role:
+        name: elasticstorage
+      vars:
+        store_state: no
+        provisions:
+          - provision_params:
+              region: eu-central-1
+              name: stackmate-onepublicbucket
+              public: true
+        modifications: []
+        terminations: []
+
+    - name: Adding an SSH key to GitHub
+      github_key:
+        name: "{{ github_deploy_key_name }}"
+        token: "{{ providers.github.token }}"
+        pubkey: '{{ public_key }}'
+        force: yes
+      register: github_deploy_key
+
+    - name: Creating the deployment directory
+      become: yes
+      file:
+        path: "{{ deployment_path }}"
+        state: directory
+        owner: "{{ deployment_user }}"
+        group: "{{ deployment_group }}"
+        recurse: yes
+
+    - name: Creating the dummy env files
+      become: yes
+      copy:
+        content: 'DJANGO_ENV=production'
+        dest: /etc/stackmate.env
+
+    - name: Creating the target file for the config
+      become: yes
+      file:
+        state: directory
+        path: "{{ deployment_path }}/configurations/{{ cfgfile | dirname }}"
+        owner: "{{ deployment_user }}"
+        group: "{{ deployment_group }}"
+      loop: "{{ appconfigs }}"
+      loop_control:
+        loop_var: cfgfile
+
+    - name: Creating dummy config files
+      become: yes
+      copy:
+        content: 'print("hello, world")'
+        dest: "{{ deployment_path }}/configurations/{{ cfgfile }}"
+        owner: "{{ deployment_user }}"
+        group: "{{ deployment_group }}"
+      loop: "{{ appconfigs }}"
+      loop_control:
+        loop_var: cfgfile
+
+    - name: Setting up gunicorn
+      include_role:
+        name: appservers
+      vars:
+        store_state: no
+        provisions:
+          - id: dependency-appserver-gunicorn
+            provision_params:
+              name: gunicorn
+              kind: gunicorn
+              port: 3000
+              uri: /
+              global: yes
+              static:
+                - uri: /static
+                  dir: static
+              config:
+                env_file: /etc/stackmate.env
+                commands:
+                  start: "/usr/bin/gunicorn django3app.wsgi.application"
+            group: application
+        modifications: []
+        terminations: []
+
+    - name: Setting up nginx
+      include_role:
+        name: nginx
+      vars:
+        store_state: no
+        provisions:
+          - id: dependency-server-nginx
+            group: application
+            provision_params:
+              version: '1.18'
+
+  post_tasks:
+    - name: Destroy GitHub SSH key
+      github_key:
+        name: "{{ github_deploy_key_name }}"
+        token: "{{ providers.github.token }}"
+        state: absent
+        force: yes
+
+    - name: Destroying the test S3 bucket
+      include_role:
+        name: elasticstorage
+      vars:
+        store_state: no
+        provisions: []
+        modifications: []
+        terminations:
+          - provision_params:
+              region: eu-central-1
+              name: stackmate-onepublicbucket
+              public: true
+
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    framework: django
+    scm: github
+    provider: aws
+    domain: ezploy.eu
+    github_deploy_key_name: molecule-test-key
+    public_key_filename: ../../../../../../tests/ssh-keys/stackmate-sample-key.pub
+    private_key_filename: ../../../../../../tests/ssh-keys/stackmate-sample-key
+    public_key: "{{ lookup('file', public_key_filename) }}"
+    repository: "git@github.com:stackmate-io/sample-app-django3.git"
+    branch: main
+    deployment_path: /var/www/djangoapp
+    is_first_deployment: true
+    region: eu-central-1
+    termination_confirmed: yes # this will remove the S3 buckets that were created
+    providers:
+      aws:
+        access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+        secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+        token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+      github:
+        access_key: "{{ lookup('env', 'STACKMATE_GITHUB_ID') }}"
+        secret: "{{ lookup('env', 'STACKMATE_GITHUB_SECRET') }}"
+        token: "{{ lookup('env', 'STACKMATE_GITHUB_TOKEN') }}"
+
+    daemons:
+      application:
+        - nginx
+        - gunicorn
+
+    statics:
+      - source: static
+        bucket: stackmate-onepublicbucket
+
+    appconfigs:
+      - django3app/settings.py
+
+    pipeline:
+      build:
+        # this pipeline is tailored so that the playbook just runs
+        - echo "running the pipeline"
+      'db:migrate':
+        - echo "db migrating"
+      'db:rollback':
+        - echo "db migrating"
+      'db:seed':
+        - echo "db seeding"
+      restart:
+        - gunicorn
+      after:
+        reload:
+          - nginx

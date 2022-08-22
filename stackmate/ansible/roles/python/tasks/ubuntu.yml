@@ -1,0 +1,107 @@
+---
+- name: Adding the apt key for the Python repository
+  become: yes
+  apt_key:
+    url: https://keyserver.ubuntu.com/pks/lookup?fingerprint=on&op=get&search=0xF23C5A6CF475977595C89F51BA6932366A755776
+    state: present
+
+- name: Adding Python repositories
+  become: yes
+  apt_repository:
+    repo: "{{ item }}"
+    state: present
+  loop:
+    - deb http://ppa.launchpad.net/deadsnakes/ppa/ubuntu {{ ansible_distribution_release }} main
+    - deb-src http://ppa.launchpad.net/deadsnakes/ppa/ubuntu {{ ansible_distribution_release }} main
+  register: python_repository
+  until: python_repository is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+  notify: refresh apt cache
+
+- name: Removing the existing Python installation
+  become: yes
+  apt:
+    name:
+      - python
+      - python-distutils
+      - python-pip
+    state: absent
+    purge: true
+  ignore_errors: True
+  register: python_existing_removal
+  until: python_existing_removal is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Installing Python
+  become: yes
+  apt:
+    name:
+      - "python{{ version }}*"
+      - "{{ python_apt_package }}"
+    update_cache: yes
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+    state: present
+  register: python_installation
+  until: python_installation is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Installing Pip
+  become: yes
+  apt:
+    name: "{{ pip_package }}"
+    state: present
+    dpkg_options: "force-confnew"
+    update_cache: yes
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+  register: pip_installation
+  until: pip_installation is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Using python3 and pip3 as defaults
+  become: yes
+  alternatives:
+    name: "{{ item.name }}"
+    path: "{{ item.source }}"
+    link: "{{ item.destination }}"
+    priority: 10
+  loop:
+    - name: python
+      source: "/usr/bin/python3"
+      destination: "/usr/bin/python"
+    - name: pip
+      source: "/usr/bin/pip3"
+      destination: "/usr/bin/pip"
+  when: version.startswith('3')
+
+- name: Installing python interface to databases
+  become: yes
+  apt:
+    name: "{{ python_apt_packages }}"
+    state: present
+    update_cache: yes
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+  register: python_database_drivers
+  until: python_database_drivers is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Installing Pip packages
+  become: yes
+  pip:
+    name: "{{ pip_install_packages }}"
+    state: present
+    executable: "{{ pip_executable }}"

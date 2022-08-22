@@ -1,0 +1,44 @@
+# Molecule managed
+
+{% if item.registry is defined %}
+FROM {{ item.registry.url }}/{{ item.image }}
+{% else %}
+FROM {{ item.image }}
+{% endif %}
+
+USER root
+
+{% if item.env is defined %}
+{% for var, value in item.env.items() %}
+{% if value %}
+ENV {{ var }} {{ value }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+RUN sed -i 's/# deb/deb/g' /etc/apt/sources.list
+RUN apt-get update && \
+    apt-get install -y python3.7 python3-pip systemd ruby \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN gem install bundler
+
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 10
+RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 10
+RUN cd /lib/systemd/system/sysinit.target.wants/ \
+    && ls | grep -v systemd-tmpfiles-setup | xargs rm -f $1
+
+RUN rm -f /lib/systemd/system/multi-user.target.wants/* \
+    /etc/systemd/system/*.wants/* \
+    /lib/systemd/system/local-fs.target.wants/* \
+    /lib/systemd/system/sockets.target.wants/*udev* \
+    /lib/systemd/system/sockets.target.wants/*initctl* \
+    /lib/systemd/system/basic.target.wants/* \
+    /lib/systemd/system/anaconda.target.wants/* \
+    /lib/systemd/system/plymouth* \
+    /lib/systemd/system/systemd-update-utmp*
+
+STOPSIGNAL SIGRTMIN+3
+
+CMD ["/lib/systemd/systemd"]

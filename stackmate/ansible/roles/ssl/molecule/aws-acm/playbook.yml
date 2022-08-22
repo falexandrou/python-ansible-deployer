@@ -1,0 +1,74 @@
+---
+- name: Converge
+  gather_facts: no
+  hosts: localhost
+
+  roles:
+    - role: ssl
+
+  pre_tasks:
+    - name: Deploying an SSL certificate to be removed
+      delegate_to: localhost
+      stackmate_aws_acm:
+        state: present
+        region: eu-central-1
+        cdn_certificate: no
+        domain: moleculetest.ezploy.eu
+        hosted_zone_id: "{{ hosted_zone_id }}"
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+        wait: no
+
+  post_tasks:
+    - name: Terminating SSL certificates that were previously provisioned
+      delegate_to: localhost
+      stackmate_aws_acm:
+        state: absent
+        domain: "{{ item.provision_params.domains | first }}"
+        alternative_names: "{{ item.provision_params.domains[1:] | list | default([]) }}"
+        region: "{{ item.provision_params.region if not item.provision_params.get('is_cdn_certificate', False) else 'us-east-1' }}"
+        cdn_certificate: "{{ item.provision_params.get('is_cdn_certificate', False) }}"
+        hosted_zone_id: "{{ hosted_zone_id }}"
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+      with_items: "{{ provisions }}"
+
+    - name: Storing output to a json file
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      delegate_to: localhost
+
+  vars:
+    provider: aws
+    hosted_zone_id: Z29S2FHXE4IGW6
+    region: eu-central-1
+    provisions:
+      - id: utility-ssl
+        provision_params:
+          region: eu-central-1
+          is_cdn_certificate: True
+          domains:
+            - "ezploy.eu"
+            - "cdn.ezploy.eu"
+        group: application
+
+      - id: utility-ssl
+        provision_params:
+          region: eu-central-1
+          is_cdn_certificate: False
+          domains:
+            - "ezploy.eu"
+            - "cdn.ezploy.eu"
+        group: application
+
+    terminations:
+      - id: utility-ssl
+        provision_params:
+          region: eu-central-1
+          is_cdn_certificate: False
+          domains:
+            - "moleculetest.ezploy.eu"

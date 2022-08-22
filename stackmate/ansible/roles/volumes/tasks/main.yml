@@ -1,0 +1,33 @@
+---
+- name: Setting the facts for the mount directories
+  set_fact:
+    provision_items: "{{ provisions | default([]) + modifications | default([]) }}"
+    security_groups: []
+    provisioned_volumes: []
+    provisioned_mounts: []
+    terminated_volumes: []
+    terminated_mounts: []
+
+- name: Installing utility libraries required by the filesystems
+  include_tasks: utilities.yml
+  when: flavor == 'instances'
+
+- name: Provisioning AWS EFS for your project
+  block:
+    - name: Creating the prerequisites for your volumes
+      include_tasks: aws-efs/before-provision.yml
+
+    - name: Creating EFS file systems and attaching them to your EC2 instances
+      include_tasks: aws-efs/provisions.yml
+      loop: "{{ provision_items }}"
+      loop_control:
+        loop_var: volume
+
+    - name: Terminating unwanted EFS filesystems
+      include_tasks: aws-efs/terminations.yml
+  when: provider == 'aws' and flavor == 'instances'
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_helpers_state ] }}"
+  when: provider == 'aws' and store_state

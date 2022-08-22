@@ -1,0 +1,23 @@
+---
+- name: Removing the IAM user policy
+  delegate_to: localhost
+  iam_policy:
+    iam_type: user
+    iam_name: "{{ ses_iam_user | get_ses_username(domain) }}"
+    state: absent
+    policy_name: "{{ domain | iam_policy_name }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: terminated_iam_user_policy
+
+- name: Removing the IAM user created
+  delegate_to: localhost
+  iam:
+    iam_type: user
+    state: absent
+    name: "{{ ses_iam_user | get_ses_username(domain) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: terminated_ses_user

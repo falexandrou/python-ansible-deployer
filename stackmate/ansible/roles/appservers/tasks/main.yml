@@ -1,0 +1,35 @@
+---
+- name: Setting facts to be populated with provisions and terminations
+  set_fact:
+    provisionables: "{{ provisions | default([]) + modifications | default([]) }}"
+    pkg_installations: []
+    appserveremplatesdir: ../templates
+
+- name: Provisioning the app server's systemd files
+  block:
+    - name: "Provisioning {{ entry.provision_params.kind }}"
+      include_tasks: appserver.yml
+      vars:
+        action: install
+      loop: "{{ provisionables }}"
+      loop_control:
+        loop_var: entry
+      when: inventory_hostname in groups.get(entry.group, {}) and entry.provision_params.kind in supported
+
+    - name: "Terminating {{ entry.provision_params.kind }}"
+      include_tasks: appserver.yml
+      vars:
+        action: remove
+      loop: "{{ terminations }}"
+      loop_control:
+        loop_var: entry
+      when: inventory_hostname in groups.get(entry.group, {}) and entry.provision_params.kind in supported
+
+    - name: Configuring the nginx website
+      include_tasks: nginx.yml
+  when: flavor == 'instances'
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_appservers_state ] }}"
+  when: store_state

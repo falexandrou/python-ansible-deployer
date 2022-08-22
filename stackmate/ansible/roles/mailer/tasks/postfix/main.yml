@@ -1,0 +1,84 @@
+---
+- name: Importing variables according to the distribution
+  include_vars: ubuntu.yml # "{{ ansible_distribution | lower }}.yml"
+  when: inventory_hostname in groups.get('provisionables', {})
+
+# pre-answer the interactive questions
+- name: Configuring Postfix installation
+  debconf:
+    name: postfix
+    question: "{{ item.question }}"
+    value: "{{ item.value }}"
+    vtype: string
+  loop:
+    - { question: 'postfix/mailname', value: '{{ domain }}' }
+    - { question: 'postfix/main_mailer_type', value: 'Internet Site' }
+  when: ansible_os_family.lower() == 'debian'
+  register: postfix_installations
+  until: postfix_installations is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Installing Postfix
+  become: yes
+  apt:
+    name: "{{ postfix_packages }}"
+    state: present
+    update_cache: yes
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+  when: ansible_os_family.lower() == 'debian'
+  register: postfix_install
+  until: postfix_install is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Configuring Postfix
+  lineinfile:
+    backup: yes
+    dest: /etc/postfix/main.cf
+    regexp: "^{{ item.variable }}\ ="
+    line: "{{ item.variable }} = {{ item.value }}"
+    state: present
+  with_items:
+    - { variable: 'relayhost', value: "[{{ smtp_server }}]:{{ smtp_port }}" }
+    - { variable: 'smtp_sasl_auth_enable', value: 'yes' }
+    - { variable: 'smtp_sasl_security_options', value: 'noanonymous' }
+    - { variable: 'smtp_sasl_password_maps', value: 'hash:/etc/postfix/sasl_passwd' }
+    - { variable: 'smtp_use_tls', value: 'yes' }
+    - { variable: 'smtp_tls_security_level', value: 'encrypt' }
+    - { variable: 'smtp_tls_note_starttls_offer', value: 'yes' }
+    - { variable: 'smtp_tls_CAfile', value: '/etc/ssl/certs/ca-bundle.crt' }
+    - { variable: 'sender_canonical_maps', value: 'regexp:/etc/postfix/sender_canonical' }
+  register: postfix_configuration
+
+- name: Creating a file with SMTP credentials
+  lineinfile:
+    backup: yes
+    create: yes
+    dest: /etc/postfix/sasl_passwd
+    regexp: "{{ smtp_server }}"
+    line: "[{{ smtp_server }}]:{{ smtp_port }} {{ smtp_username }}:{{ smtp_password }}"
+    state: present
+  register: postfix_credentials
+  no_log: yes
+
+- name: Creating a hashmap database file with SMTP credentials
+  command: postmap hash:/etc/postfix/sasl_passwd
+  when: postfix_credentials is success
+  register: postmap
+
+- name: Setting permissions and owner of created files
+  file:
+    path: "{{ item }}"
+    owner: root
+    group: root
+    mode: 0600
+  ignore_errors: "{{ ansible_check_mode }}"
+  with_items:
+    - /etc/postfix/sasl_passwd.db
+    - /etc/postfix/sasl_passwd
+  notify: restart postfix

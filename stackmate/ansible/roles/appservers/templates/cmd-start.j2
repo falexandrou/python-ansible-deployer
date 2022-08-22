@@ -1,0 +1,9 @@
+{% if entry.provision_params.kind == 'gunicorn' %}
+{{executable_path.stdout}} {{ entry.provision_params.get('appname') }} -b "127.0.0.1:{{ entry.provision_params.port }}"
+{% elif entry.provision_params.kind == 'daphne' %}
+{{executable_path.stdout}} {{ entry.provision_params.get('appname') }} -b 127.0.0.1 -p {{ entry.provision_params.port }}
+{% elif entry.provision_params.kind == 'pm2' %}
+{{executable_path.stdout}} start {{ entry.provision_params.get('configfile') }}
+{% elif entry.provision_params.kind == 'puma' %}
+/usr/bin/env bundle exec puma -C {{ public_release_path }}/{{ entry.provision_params.get('configfile') | default('config/puma.rb') }}
+{% endif %}

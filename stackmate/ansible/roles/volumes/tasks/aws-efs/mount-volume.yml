@@ -1,0 +1,28 @@
+---
+- name: Preparing the mount directories
+  become: yes
+  file:
+    path: "{{ volume.provision_params.mount }}"
+    recurse: yes
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+
+- name: Pausing so that the NFS volume becomes available
+  pause:
+    seconds: 10
+
+- name: Mount the volumes on the instances
+  become: yes
+  mount:
+    src: "{{ efs_filesystem.efs.filesystem_address }}"
+    path: "{{ volume.provision_params.mount }}"
+    backup: yes
+    fstype: nfs
+    opts: "{{ mount_options.nfs }}"
+    state: mounted
+  register: mounted_fs
+
+- name: Setting the facts
+  set_fact:
+    provisioned_volumes: "{{ provisioned_volumes | default([]) + [efs_filesystem.efs] }}"
+    provisioned_mounts: "{{ provisioned_mounts | default([]) + [mounted_fs] }}"

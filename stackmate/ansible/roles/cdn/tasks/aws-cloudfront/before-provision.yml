@@ -1,0 +1,9 @@
+---
+- name: Fetching SSL certificates from Certificate Manager
+  delegate_to: localhost
+  aws_acm_info:
+    region: us-east-1 # SSL certificates for cloudfront should be deployed in us-east-1 region
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: ssl_certificates

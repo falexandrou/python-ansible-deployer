@@ -1,0 +1,110 @@
+---
+- name: "Setting the facts for the app server entry"
+  set_fact:
+    package_state: "{{ 'present' if action == 'install' else 'absent' }}"
+    servicecfg: "{{ configurations[entry.provision_params.kind] | default({}) }}"
+    gemcmd: "{{ 'install' if action == 'install' else 'uninstall' }}"
+    startcmd_template: "{{ appserveremplatesdir + '/cmd-start.j2' }}"
+    stopcmd_template: "{{ appserveremplatesdir + '/cmd-stop.j2' }}"
+    reloadcmd_template: "{{ appserveremplatesdir + '/cmd-reload.j2' }}"
+    service_kind: "{{ entry.provision_params.kind }}"
+
+- name: Setting the facts for PATH
+  shell: ". {{ system_profile_script }} && . {{ profile_script }} && echo $PATH"
+  args:
+    executable: /bin/bash
+  changed_when: path_out.rc == 0
+  register: path_out
+  tags:
+    - skip_ansible_lint
+
+- name: "Handling {{ service_kind }} as a global python package"
+  become: yes
+  pip:
+    name: "{{ entry.provision_params.kind }}"
+    state: "{{ package_state }}"
+    version: "{{ entry.provision_params.version | default(omit) }}"
+  when: entry.provision_params.kind in pip_packages
+  register: pip_modification
+  environment:
+    PATH: "{{ path_out.stdout }}"
+
+- name: "Handling {{ service_kind }} installation"
+  shell: >
+    gem {{ gemcmd }} {{ entry.provision_params.kind }}
+    {% if entry.provision_params.get('version') %} -v '{{ entry.provision_params.version }}'{% endif %}
+    --no-user-install
+  when: entry.provision_params.kind in gem_packages and action == 'install'
+  changed_when: gem_modification.rc == 0
+  register: gem_modification
+  environment:
+    PATH: "{{ path_out.stdout }}"
+
+- name: "Handling {{ service_kind }} as a global npm package"
+  become: yes
+  npm:
+    name: "{{ entry.provision_params.kind }}"
+    state: "{{ package_state }}"
+    production: yes
+    version: "{{ entry.provision_params.version | default(omit) }}"
+    global: yes
+  when: entry.provision_params.kind in npm_packages
+  register: npm_modification
+  environment:
+    PATH: "{{ path_out.stdout }}"
+
+- name: Determining the absolute path for the executable
+  shell: "which {{ entry.provision_params.kind }} || echo '{{ entry.provision_params.kind }}'"
+  args:
+    executable: /bin/bash
+  changed_when: executable_path.rc == 0
+  register: executable_path
+  environment:
+    PATH: "{{ path_out.stdout }}"
+  tags:
+    - skip_ansible_lint
+
+- name: "Setting the configuration entry"
+  set_fact:
+    entry_config: "{{ entry.provision_params.get('config') | ternary(entry.provision_params.get('config'), {}) }}"
+    default_startcmd: "{{ lookup('template', startcmd_template) }}"
+    default_stopcmd: "{{ lookup('template', stopcmd_template) }}"
+    default_reloadcmd: "{{ lookup('template', reloadcmd_template) }}"
+
+- name: Setting the provision item entry
+  set_fact:
+    itementry:
+      provision_params:
+        id: "{{ entry.id }}"
+        kind: "{{ entry.provision_params.kind }}"
+        description: "{{ entry.provision_params.description | default(servicecfg.get('description')) | default('Worker service') }}"
+        target: yes
+        socket: yes
+        enabled: "{{ entry.provision_params.get('enabled') | default(false) }}" # the service will be enabled via the application role
+        config: "{{ servicecfg | combine(entry_config, recursive=True) }}"
+        startcmd: "{{ entry.provision_params.get('startcmd') | ternary(entry.provision_params.startcmd, default_startcmd) }}"
+        stopcmd: "{{ entry.provision_params.get('stopcmd') | ternary(entry.provision_params.stopcmd, default_stopcmd) }}"
+        reloadcmd: "{{ entry.provision_params.get('reloadcmd') | ternary(entry.provision_params.reloadcmd, default_reloadcmd) }}"
+      group: "{{ entry.group }}"
+
+- name: "Provisioning the systemd service configuration for {{ service_kind }}"
+  include_role:
+    name: systemd
+  vars:
+    store_state: no
+    working_directory: "{{ public_release_path }}"
+    provisions: "{{ [itementry] if action == 'install' else [] }}"
+    modifications: []
+    terminations: "{{ [itementry] if not action == 'install' else [] }}"
+
+- name: Setting facts regarding the package modifications
+  set_fact:
+    pkg_modifications: "{{ pkg_modifications | default([]) + [modification] }}"
+  loop:
+    - "{{ pip_modification }}"
+    - "{{ gem_modification }}"
+    - "{{ npm_modification }}"
+  loop_control:
+    loop_var: modification
+  when: modification is success
+  no_log: yes

@@ -1,0 +1,16 @@
+---
+- name: Setting up the variables to append the created resources to
+  set_fact:
+    provision_items: "{{ provisions | default([]) + modifications | default([]) }}"
+
+- name: Installing Node.js and its dependencies
+  include_tasks: provision-nodejs.yml
+  loop: "{{ provision_items }}"
+  loop_control:
+    loop_var: prov
+  when: flavor == 'instances' and inventory_hostname in groups.get(prov.group, {})
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_nodejs_state ] }}"
+  when: store_state

@@ -1,0 +1,19 @@
+---
+- name: Disable empty password login for SSH
+  become: yes
+  lineinfile:
+    dest: "{{ sshd_config }}"
+    regexp: "{{ entry.regexp }}"
+    line: "{{ entry.line }}"
+  loop:
+    - regexp: "^#?PermitEmptyPasswords"
+      line: "PermitEmptyPasswords no"
+    - regexp: "^#?PermitRootLogin"
+      line: "PermitRootLogin no"
+    - regexp: "^#?PasswordAuthentication "
+      line: "PasswordAuthentication no"
+    - regexp: "^#?UsePAM"
+      line: "UsePAM yes"
+  loop_control:
+    loop_var: entry
+  notify: restart sshd

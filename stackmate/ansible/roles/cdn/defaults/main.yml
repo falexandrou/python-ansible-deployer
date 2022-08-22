@@ -1,0 +1,21 @@
+---
+provider:
+domain:
+stage:
+region:
+hosted_zone_id:
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+store_state: yes
+
+dns_records_ttl: 7200
+
+# cloudfront specific
+cloudfront_price_class: PriceClass_All
+
+# Alias hosted zone id is always Z2FDTNDATAQYW2
+# see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-route53-aliastarget.html#cfn-route53-aliastarget-hostedzoneid
+route53_alias_hosted_zone_id: Z2FDTNDATAQYW2

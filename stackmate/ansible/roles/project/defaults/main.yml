@@ -1,0 +1,55 @@
+---
+provider:
+domain:
+region:
+deployment_user: stackmate
+deployment_group: stackmate
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+store_state: yes
+
+# the reference & operation variable should be defined per deployment
+scm: github
+reference: HEAD
+operation: deployment
+keep_releases: 5
+
+# TODO: add test step
+build_steps:
+  - build
+  - cleanup
+
+# project - related variables
+is_first_deployment: false
+repository: git@github.com:SOMEONE/SOMEREPO.git
+flavor: instances
+deployment_path: /var/www/application
+stage: production
+branch: main
+releasedir_prefix:
+excluded_from_repo:
+  - .git/
+  - .gitignore
+  - .stackmate/
+  - README.md
+  - .editorconfig
+
+linked_directories:
+  django: []
+  sinatra: []
+  nodejs: []
+  rails:
+    - tmp/cache
+    - tmp/pids
+    - tmp/sockets
+    - tmp/sessions
+
+static_sync_cache_control: "public, max-age=3600"
+statics: []
+profile_script: ~/.profile
+system_profile_script: /etc/profile
+max_pipeline_time: 3600
+command_output_file: /tmp/command-output.log

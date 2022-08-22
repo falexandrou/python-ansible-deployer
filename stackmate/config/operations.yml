@@ -1,0 +1,238 @@
+---
+# Contains the operation runbooks which we use to run playbooks by
+
+# Deployments
+deployment:
+  flavors:
+    - instances
+  description: Deploy to VMs via SSH
+  steps:
+    #
+    # IMPORTANT NOTE:
+    # All the roles in every step should be able to execute in parallel
+    # unless stated otherwise
+    #
+    - name: Preparing the stage for deployment
+      group: prerequisites
+      parallel: no
+      entries:
+        - provisions
+        - modifications
+      roles:
+        - name: prepare
+          hosts: localhost
+          execution: free
+
+        - name: prerequisites
+          hosts: localhost
+          execution: linear
+
+    - name: Setting up the foundations of your infrastructure
+      group: core
+      # By default we include provisions, modifications and terminations.
+      # For infrastructure orchestration, we need to provision & modify first
+      # Then have a last step (after the new source has been deployed),
+      # that takes care of the terminations.
+      parallel: yes
+      entries:
+        - provisions
+        - modifications
+      roles:
+        - name: ssl
+          hosts: localhost
+          execution: linear
+        - name: instances
+          hosts: localhost
+          execution: linear
+
+    - name: Setting up the essentials on the instances
+      group: essentials
+      parallel: yes
+      roles:
+        - name: essentials
+          hosts: all
+          execution: free
+
+    - name: Setting up the deployment targets
+      group: targets
+      parallel: yes
+      # The actual need behind this is that these modules have 'pause' calls
+      # due to various AWS restrictions and asynchronous handling.
+      # These have to be run in a synchronous manner
+      entries:
+        - provisions
+        - modifications
+      roles:
+        - name: caches
+          hosts: all
+          execution: linear
+        - name: mailer
+          hosts: all
+          execution: linear
+        - name: cdn
+          hosts: localhost
+          execution: linear
+        - name: databases
+          hosts: all
+          execution: linear
+        - name: elasticstorage
+          hosts: localhost
+          execution: linear
+        - name: volumes
+          hosts: all
+          execution: linear
+
+    - name: Provisioning your instances for the application
+      group: dependencies
+      parallel: no # change this and you'll have apt lock failures in random order
+      roles:
+        - name: nginx
+          hosts: all
+          execution: free
+        - name: nodejs
+          hosts: all
+          execution: free
+        - name: python
+          hosts: all
+          execution: free
+        - name: ruby
+          hosts: all
+          execution: free
+
+    - name: Copying the configuration files & setting up the environment
+      group: config
+      parallel: yes
+      roles:
+        - name: configfiles
+          hosts: all
+          execution: free
+          gather_facts: no
+        - name: environment
+          hosts: all
+          execution: free
+          gather_facts: no
+        - name: jobschedules
+          hosts: all
+          execution: linear
+          gather_facts: no
+
+    - name: Deploying your application’s deployment targets
+      group: deployment
+      parallel: yes
+      roles:
+        - name: appservers
+          hosts: all
+          execution: linear
+        - name: workers
+          hosts: all
+          execution: linear
+
+    - name: Deploying your application
+      group: deployment
+      parallel: no
+      roles:
+        - name: project
+          hosts: all
+          execution: linear
+          gather_facts: no
+        - name: routing
+          hosts: localhost
+          execution: linear
+
+    - name: Terminating unnecessary resources
+      group: terminations
+      parallel: yes
+      entries:
+        - terminations
+      roles:
+        - name: instances
+          hosts: localhost
+          execution: free
+        - name: databases
+          hosts: localhost
+          execution: free
+        - name: elasticstorage
+          hosts: localhost
+          execution: free
+        - name: cdn
+          hosts: localhost
+          execution: free
+        - name: ssl
+          hosts: localhost
+          execution: free
+
+    - name: Notifying the team about the deployment status
+      group: notifications
+      roles:
+        - name: notifications
+          hosts: localhost
+          execution: free
+
+rollback:
+  flavors:
+    - instances
+  description: Roll back a deployment on VMs via SSH
+  steps:
+    - name: Rolling back your application
+      group: rollback
+      parallel: no
+      roles:
+        - name: project
+          hosts: all
+          execution: linear
+          gather_facts: no
+
+# Utilities
+ssh-enable:
+  flavors:
+    - instances
+  description: Enable SSH connection from an IP to the VM premises
+
+ssh-disable:
+  flavors:
+    - instances
+  description: Enable SSH connection from an IP to the VM premises
+
+db-backup:
+  flavors: []
+  description: Back up a database
+
+db-restore:
+  flavors: []
+  description: Restore a database to a database server
+
+db-import-dump:
+  flavors: []
+  description: Import an SQL dump to a database
+
+cdn-invalidate:
+  flavors: []
+  description: Invalidates CDN cache
+
+ssl-renew:
+  flavors: []
+  description: Renews an SSL certificate
+
+restart-services:
+  flavors: []
+  description: Restarts services
+
+volumes-snapshot:
+  flavors: []
+  description: Takes a snapshot of the disk volumes
+
+maintenance-on:
+  flavors: []
+  description: Enable maintenance mode for the app
+
+maintenance-off:
+  flavors: []
+  description: Disable maintenance mode for the app
+
+reset-ssh-key:
+  flavors: []
+  description: Reset the SSH key used in Github & the server
+
+tear-down:
+  flavors: []
+  description: Tears down an environment - USE ONLY IN TESTS

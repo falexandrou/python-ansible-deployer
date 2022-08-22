@@ -1,0 +1,32 @@
+---
+# Stackmate project configuration
+flavor: static
+# The repository to deploy from
+repository: git@github.com:stackmate-io/documentation.git
+# The cloud provider to use
+provider: aws
+# The region to deploy to
+region: eu-central-1
+# The provider credentials to use
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+  github:
+    access_key: "{{ lookup('env', 'STACKMATE_GITHUB_ID') }}"
+    secret: "{{ lookup('env', 'STACKMATE_GITHUB_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_GITHUB_TOKEN') }}"
+
+# environments
+production:
+  # branch to deploy
+  branch: master
+  # domain to use
+  domain: docs.ezploy.eu
+  # services to use
+  services:
+    - name: stackmate-docs-production
+      type: elasticstorage
+      website: true
+      domain: docs.ezploy.eu
+      contents: .

@@ -1,0 +1,46 @@
+# File generated and managed by Stackmate.io
+#
+# To enable the service, run the following command:
+#   systemctl enable {{ servicecfg.name }}
+#
+# To disable the service run the following command:
+#   systemctl enable {{ servicecfg.name }}
+#
+[Unit]
+Description={{ servicecfg.description }}
+After={{ servicecfg.after }}
+
+[Service]
+DynamicUser=true
+User={{ servicecfg.user }}
+Group={{ servicecfg.group }}
+UMask=0002
+Type={{ servicecfg.process_type }}
+WorkingDirectory={{ working_directory }}
+ExecStart={{ servicecfg.startcmd }}
+{% if servicecfg.get('stopcmd') %}
+ExecStop={{ servicecfg.stopcmd }}
+{% endif %}
+{% if servicecfg.get('reloadcmd') %}
+ExecReload={{ servicecfg.reloadcmd }}
+{% endif %}
+{% for envkey, envval in servicecfg.environment.items() %}
+Environment={{ envkey }}={{ envval }}
+{% endfor %}
+EnvironmentFile={{ servicecfg.env_file }}
+KillMode={{ servicecfg.kill_mode }}
+SendSIGKILL=no
+TimeoutStopSec=5
+PrivateTmp=true
+
+# if we crash, restart
+RestartSec=5
+Restart=on-failure
+
+# output goes to /var/log/syslog
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier={{ servicecfg.name }}
+
+[Install]
+WantedBy=multi-user.target

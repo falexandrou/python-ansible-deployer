@@ -1,0 +1,12 @@
+---
+- name: refresh apt cache
+  become: yes
+  apt:
+    update_cache: yes
+  when: python_repository.changed
+  register: refresh_apt_cache
+  until: refresh_apt_cache is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock

@@ -1,0 +1,9 @@
+---
+# TODO: install
+- name: Installing and provisioning MySQL server on your instances
+  import_tasks: provision-mysql.yml
+  loop: "{{ provisions | filter_mysql_items(modifications) }}"
+
+- name: Installing and provisioning PostgreSQL server on your instances
+  import_tasks: provision-postgresql.yml
+  loop: "{{ provisions | filter_postgres_items(modifications) }}"

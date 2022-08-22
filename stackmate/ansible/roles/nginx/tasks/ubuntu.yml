@@ -1,0 +1,34 @@
+---
+- name: Adding the apt key for the NGINX repository
+  become: yes
+  apt_key:
+    keyserver: keyserver.ubuntu.com
+    id: "{{ apt_keys[ansible_distribution.lower()][ansible_distribution_release.lower()] }}"
+
+- name: Adding NGINX repository to /etc/sources.list
+  become: yes
+  apt_repository:
+    repo: "{{ item }}"
+    state: present
+  loop:
+    - "deb https://nginx.org/packages/ubuntu/ {{ ansible_distribution_release }} nginx"
+    - "deb-src https://nginx.org/packages/ubuntu/ {{ ansible_distribution_release }} nginx"
+  register: nginx_repository
+  until: nginx_repository is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+  notify: refresh apt cache
+
+- name: Installing NGINX
+  become: yes
+  apt:
+    name: "nginx-full={{ version }}*"
+    state: present
+  register: nginx_installation
+  until: nginx_installation is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock

@@ -1,0 +1,23 @@
+---
+- name: Installing the database drivers for your application
+  become: yes
+  apt:
+    name: "{{ provision_items | default([]) | get_installables(modifications, client_packages) | list }}"
+    state: present
+    update_cache: yes
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+  register: database_drivers_install
+  until: database_drivers_install is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Installing python packages required for creating users & databases
+  become: yes
+  pip:
+    name: "{{ pip_client_packages[provision_item.provision_params.engine] }}"
+  loop: "{{ provision_items | default([]) }}"
+  loop_control:
+    loop_var: provision_item
+  when: provision_item.provision_params.get('engine')

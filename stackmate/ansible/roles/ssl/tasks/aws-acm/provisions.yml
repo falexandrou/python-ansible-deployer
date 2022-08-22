@@ -1,0 +1,18 @@
+---
+- name: Requesting and verifying a new SSL certificate with AWS Certificate Manager
+  delegate_to: localhost
+  stackmate_aws_acm:
+    state: present
+    region: "{{ item.provision_params.region if not item.provision_params.get('is_cdn_certificate', False) else 'us-east-1' }}"
+    cdn_certificate: "{{ item.provision_params.get('is_cdn_certificate', False) }}"
+    domain: "{{ item.provision_params.domains | first }}"
+    hosted_zone_id: "{{ hosted_zone_id }}"
+    alternative_names: "{% if item.provision_params.domains | length > 1 %}{{ item.provision_params.domains[1:] }}{% else %}[]{% endif %}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: provisioned_ssl_certificates
+
+- name: Storing provision results
+  set_fact:
+    provisions_result: "{{ provisions_result | default([]) + [provisioned_ssl_certificates] }}"

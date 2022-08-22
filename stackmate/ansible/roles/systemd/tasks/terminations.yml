@@ -1,0 +1,42 @@
+---
+- name: Populating the item config
+  set_fact:
+    servicename: "{{ item.provision_params.get('servicename') | ternary(item.provision_params.servicename, item.provision_params.kind) }}"
+
+- name: Stopping & disabling the {{ servicename }} service
+  systemd:
+    name: "{{ servicename }}"
+    state: stopped
+    enabled: no
+
+- name: "Removing the {{ servicename }} systemd service file"
+  become: yes
+  file:
+    path: "/etc/systemd/system/{{ servicename }}.service"
+    state: absent
+  register: terminated_service
+
+- name: "Removing the {{ servicename }} systemd target file"
+  become: yes
+  file:
+    path: "/etc/systemd/system/{{ servicename }}.target"
+    state: absent
+  register: terminated_target
+
+- name: "Removing the {{ servicename }} systemd socket file"
+  become: yes
+  file:
+    path: "/etc/systemd/system/{{ servicename }}.socket"
+    state: absent
+  register: terminated_socket
+
+- name: Storing the service output
+  set_fact:
+    termination_results: "{{ termination_results | default([]) + [output] }}"
+  loop:
+    - "{{ terminated_service }}"
+    - "{{ terminated_target }}"
+    - "{{ terminated_socket }}"
+  loop_control:
+    loop_var: output
+  when: output is defined and output is success

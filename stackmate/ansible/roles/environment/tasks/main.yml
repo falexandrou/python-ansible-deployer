@@ -1,0 +1,40 @@
+---
+- name: Making sure the environment variables file exists
+  become: yes
+  file:
+    path: "{{ env_variables_file }}"
+    mode: 0644
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+    modification_time: preserve
+    access_time: preserve
+    state: touch
+  register: environment_file
+
+- name: Cleaning up the environment file
+  become: yes
+  lineinfile:
+    path: "{{ env_variables_file }}"
+    state: absent
+    regexp: '^{{ item.provision_params.export }}='
+  loop: "{{ (terminations | default([])) + (modifications | default([])) }}"
+  register: terminated_exports
+  changed_when: True
+
+- name: Applying exports to the environment file
+  become: yes
+  lineinfile:
+    path: "{{ env_variables_file }}"
+    line: '{{ item.provision_params.export }}="{{ item.provision_params.value }}"'
+  loop: "{{ (provisions | default([])) + (modifications | default([])) }}"
+  register: provisioned_exports
+  changed_when: True
+
+- name: Setting the facts
+  set_fact:
+    provisioned_envs: "{{ provisioned_exports.results | default([]) + modified_exports.results | default([]) }}"
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_envs_state ] }}"
+  when: store_state

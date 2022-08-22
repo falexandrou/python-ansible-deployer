@@ -1,0 +1,87 @@
+---
+- name: Waiting for hosts to become available
+  wait_for_connection:
+    timeout: 600
+
+- name: Including OS-specific variables
+  include_vars: "{{ ansible_distribution | lower }}.yml"
+
+- name: Set timezone
+  become: yes
+  copy:
+    content: '{{ timezone | default("UTC") }}'
+    dest: /etc/timezone
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Remove existing localtime configuration file
+  become: yes
+  file:
+    path: /etc/localtime
+    state: absent
+
+- name: Installing essential packages for your servers (this will take a while)
+  become: yes
+  apt:
+    name: "{{ essential_packages | default([]) | list }}"
+    update_cache: yes
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+  when: ansible_os_family.lower() == "debian"
+  register: essential_pkgs
+  until: essential_pkgs is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Set localtime to UTC
+  become: yes
+  file:
+    src: /usr/share/zoneinfo/{{ timezone | default("UTC") }}
+    dest: /etc/localtime
+    state: link
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Reconfigure tzdata
+  become: yes
+  command: dpkg-reconfigure -f noninteractive tzdata
+  register: tzdata_output
+  changed_when: tzdata_output.rc == 0
+
+- name: Ensuring the NTP process is up and running
+  import_tasks: ntp.yml
+
+- name: Securing the SSH server
+  import_tasks: secure-ssh.yml
+
+- name: Creating swap
+  import_tasks: swap.yml
+  when: enable_swap
+
+- name: Installing required python modules
+  pip:
+    name: "{{ pkgname }}"
+    state: present
+  loop:
+    - boto3
+    - python-dateutil
+  loop_control:
+    loop_var: pkgname
+
+- name: Assigning user to groups
+  become: yes
+  user:
+    name: "{{ deployment_user }}"
+    groups:
+      - docker
+    append: yes
+
+- name: Reloading the systemd daemon
+  become: yes
+  systemd:
+    name: docker
+    state: started
+    daemon_reload: yes

@@ -1,0 +1,7 @@
+{% if entry.provision_params.kind == 'resque' %}
+{{bundle_executabe_path.stdout}} exec rake {{ stage | default("production") }} resque:stop_workers
+{% elif entry.provision_params.kind == 'celery' %}
+{{celery_executable.stdout}} multi stopwait ${CELERYD_NODES} --pidfile=${CELERYD_PID_FILE}
+{% else %}
+/usr/bin/kill -TSTP $MAINPID
+{% endif %}

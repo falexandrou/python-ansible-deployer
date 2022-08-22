@@ -1,0 +1,34 @@
+---
+# This is a hack.
+# We can't output the live status for the command because the async callbacks in plugins
+# are not called, and there are pending issues on Ansible repository to be solved
+# eg. https://github.com/ansible/ansible/issues/14681
+#
+# If Ansible at some point allows the output of long-running commands, clean up the following:
+# - Watch role
+# - This file
+# - LIVE_OUTPUT_TAG, IGNORE_EMPTY_OUTPUT_TAG and COMMAND_VAR_TAG
+#   in constants and output.py (callback plugin)
+- name: "{{ command_title is defined | ternary(command_title, 'Executing shell command in the background') }}"
+  shell: "{{ command }} > /tmp/release-output.log"
+  args:
+    executable: /bin/bash
+    chdir: "{{ release_path }}"
+  environment: "{{ user_env_vars }}"
+  register: job
+  changed_when: True
+  async: "{{ max_pipeline_time }}"
+  poll: 0
+  tags:
+    - skip_ansible_lint
+    - has_command_var
+
+- name: Waiting for command to conclude
+  include_role:
+    name: watch
+  vars:
+    watch_file: /tmp/release-output.log
+    watch_job: job
+    watch_timeout: "{{ max_pipeline_time }}"
+  tags:
+    - ignore_empty_output

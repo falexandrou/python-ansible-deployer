@@ -1,0 +1,27 @@
+---
+- name: Getting the list of security groups
+  delegate_to: localhost
+  ec2_group_info:
+    filters:
+      group-name:
+        - "{{ instances_security_group }}"
+        - default
+      vpc-id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: sginfo
+
+- name: Setting the security group ids to use
+  set_fact:
+    security_group_ids: "{{ sginfo.security_groups | map(attribute='group_id') | list }}"
+
+- name: Fetching information about the existing volumes
+  delegate_to: localhost
+  ec2_vol_info:
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: ebs_existing_volumes

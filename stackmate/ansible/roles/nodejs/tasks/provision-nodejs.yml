@@ -1,0 +1,35 @@
+---
+- name: Setting the version
+  set_fact:
+    version: "{{ prov.provision_params.version | default(version) | string }}"
+
+- import_tasks: ubuntu.yml
+  when: ansible_distribution.lower() == 'ubuntu'
+
+- name: Making sure the NPM library is writable by the "{{ deployment_user }}" user
+  become: yes
+  file:
+    path: "{{ npm_lib_path }}"
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_user }}"
+    state: directory
+
+- name: Adding the Node.js paths to the users PATH variables
+  become: yes
+  template:
+    src: npm-profile-path.j2
+    dest: /etc/profile.d/npm.sh
+    mode: 0755
+
+- name: Installing global NPM packages
+  become: yes
+  npm:
+    name: "{{ item }}"
+    version: latest
+    global: true
+    state: present
+  environment:
+    NPM_CONFIG_PREFIX: "{{ npm_lib_path }}"
+    NODE_PATH: "{{ npm_lib_path }}/lib/node_modules"
+    NPM_CONFIG_UNSAFE_PERM: "{{ npm_config_unsafe_perm }}"
+  loop: "{{ npm_global_packages }}"

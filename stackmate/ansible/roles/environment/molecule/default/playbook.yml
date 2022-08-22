@@ -1,0 +1,101 @@
+---
+- name: Converge
+  hosts: all
+  roles:
+    - role: environment
+
+  pre_tasks:
+    - name: Making sure the environment variables file exists
+      become: yes
+      file:
+        path: "{{ env_variables_file }}"
+        owner: "{{ deployment_user }}"
+        group: "{{ deployment_group }}"
+        mode: 0755
+        state: touch
+
+    - name: Adding the lines to be modified
+      become: yes
+      lineinfile:
+        path: "{{ env_variables_file }}"
+        line: 'SMTP_PORT="12345"'
+
+    - name: Adding the lines to be deleted
+      become: yes
+      lineinfile:
+        path: "{{ env_variables_file }}"
+        line: 'SOME_TEST_URL="https://example.com"'
+
+  post_tasks:
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    provisions:
+      - id: utility-environment-abc123
+        provision_params:
+          kind: environment
+          export: DATABASE_MAIN_URL
+          value: mysql://bbbb:bbbb@92.12.123.213:443/stackmate
+        group: application
+      - id: utility-environment-abc234
+        provision_params:
+          kind: environment
+          export: RAILS_ENV
+          value: production
+        group: application
+      - id: utility-environment-abc345
+        provision_params:
+          kind: environment
+          export: SMTP_PASSWORD
+          value: qwerty1
+        group: application
+      - id: utility-environment-abc456
+        provision_params:
+          kind: environment
+          export: CDN_URL
+          value: cdn.some.distribution.com
+        group: application
+      - id: utility-environment-abc567
+        provision_params:
+          kind: environment
+          export: SMTP_USERNAME
+          value: abc1234
+        group: application
+      - id: utility-environment-abc678
+        provision_params:
+          kind: environment
+          export: INTERNAL_URL
+          value: https://abc.alb.something.somewhere.com:80
+        group: application
+      - id: utility-environment-abc789
+        provision_params:
+          kind: environment
+          export: STORAGE_URL
+          value: https://storage.something.somewhere.com/some-bucket
+        group: application
+      - id: utility-environment-abc890
+        provision_params:
+          kind: environment
+          export: SMTP_HOST
+          value: mailer.some.distribution.com
+        group: application
+    modifications:
+      - id: utility-environment-e5bdba188bc08c3e1e4f1d1489cb3899
+        provision_params:
+          kind: environment
+          export: SMTP_PORT
+          value: 587
+        group: application
+    terminations:
+      - id: utility-environment-7fbbbeea2fefd23258e6bdfb27c73890
+        provision_params:
+          kind: environment
+          export: SOME_TEST_URL
+          value: https://example.com
+        group: application

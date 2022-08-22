@@ -1,0 +1,2 @@
+---
+rvm_binary: "{{ rvm_install_dir }}/bin/rvm"

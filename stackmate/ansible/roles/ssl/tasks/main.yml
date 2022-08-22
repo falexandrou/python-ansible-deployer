@@ -1,0 +1,22 @@
+---
+- name: Setting default facts
+  set_fact:
+    provisions_result: []
+    terminations_results: []
+
+- name: Provisioning SSL certificates on AWS Certificate Manager
+  block:
+    # Terminations should go first because of domain name conflicts
+    - name: Terminating redundant SSL certificates
+      include_tasks: aws-acm/terminations.yml
+      with_items: "{{ terminations }}"
+
+    - name: Requesting and verifying a new SSL certificate with AWS Certificate Manager
+      include_tasks: aws-acm/provisions.yml
+      with_items: "{{ provisions }}"
+  when: provider == 'aws'
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_ssl_state ] }}"
+  when: store_state

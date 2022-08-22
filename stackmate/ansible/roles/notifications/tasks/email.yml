@@ -1,0 +1,28 @@
+---
+- name: Choosing the template to render
+  set_fact:
+    bodytemplate: "../templates/email/{{ operation }}/body/{{ deployment_status | default('success') }}.j2"
+    subjecttemplate: "../templates/email/{{ operation }}/subject/{{ deployment_status | default('success') }}.j2"
+
+- name: Notifying the team about the deployment via Email
+  delegate_to: localhost
+  mail:
+    host: "{{ providers.email.host }}"
+    port: "{{ providers.email.port }}"
+    username: "{{ providers.email.access_key }}"
+    password: "{{ providers.email.secret }}"
+    to: "{{ notification.targets }}"
+    from: "{{ email_from_name }} <{{ email_from }}>"
+    subject: "{{ lookup('template', subjecttemplate) }}"
+    body: "{{ lookup('template', bodytemplate) }}"
+    charset: "utf-8"
+    subtype: html
+    headers:
+      - "Reply-To={{ support_email }}"
+  register: email_notification
+
+- name: Setting the facts for the triggered notifications
+  set_fact:
+    notifications_output:
+      email: "{{ notifications_output.email | default([]) + [email_notification] }}"
+      slack: "{{ notifications_output.slack | default([]) }}"

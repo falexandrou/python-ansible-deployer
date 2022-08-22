@@ -1,0 +1,101 @@
+---
+- name: Setting the facts for the application directory structure
+  set_fact:
+    app_dir_releases: "{{ deployment_path }}/releases"
+    app_dir_repository: "{{ deployment_path }}/repository"
+    app_dir_shared: "{{ deployment_path }}/shared"
+    app_dir_current: "{{ deployment_path }}/current"
+    app_dir_cache: "{{ deployment_path }}/cache"
+    app_dir_configs: "{{ deployment_path }}/configurations"
+    private_key: "/home/{{ deployment_user }}/.ssh/stackmate"
+    public_key: "/home/{{ deployment_user }}/.ssh/stackmate.pub"
+    ssh_config_file: "/home/{{ deployment_user }}/.ssh/config"
+    release_path: null
+    git_ssh_command: null
+    pipeline_output: []
+    sync_output: []
+    build_step_output: {}
+    db_step_output: {}
+    restart_step_output: {}
+    post_release_step_output: {}
+    seed_step_output: {}
+
+- name: Copying the private SSH key over
+  become: yes
+  copy:
+    src: "{{ private_key_filename }}"
+    dest: "{{ private_key }}"
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+    mode: '0600'
+
+- name: Copying the public SSH key over
+  become: yes
+  copy:
+    src: "{{ public_key_filename }}"
+    dest: "{{ public_key }}"
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+    mode: '0644'
+
+- name: Enable Host Forwarding in the SSH config file
+  become: yes
+  copy:
+    dest: "{{ ssh_config_file }}"
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+    mode: '0644'
+    content: |
+      Host *
+      ForwardAgent yes
+
+- name: Evaluating SSH agent & adding the private key
+  become: yes
+  shell: 'eval "$(ssh-agent)"; ssh-add {{ private_key }}'
+  args:
+    executable: /bin/bash
+  register: ssh_agent_add
+  changed_when: ssh_agent_add.rc == 0
+  tags:
+    - skip_ansible_lint
+
+- name: Getting the list of environment variables to prepend to the commands
+  shell: "if [ -f /etc/stackmate.env ]; then echo -ne $(cat /etc/stackmate.env | xargs); fi"
+  no_log: true
+  args:
+    executable: /bin/bash
+    chdir: "{{ release_path }}"
+  register: app_env_vars
+  changed_when: app_env_vars.rc == 0
+  tags:
+    - skip_ansible_lint
+
+- name: Setting the facts for the user's PATH
+  shell: ". {{ system_profile_script }} && . {{ profile_script }} && echo $PATH"
+  args:
+    executable: /bin/bash
+  changed_when: path_out.rc == 0
+  register: path_out
+  tags:
+    - skip_ansible_lint
+
+- name: Setting the fact path
+  set_fact:
+    user_env_vars: "{{ app_env_vars.stdout | process_app_env | default({}) | combine({'PATH': path_out.stdout}) }}"
+
+- name: Deploying the application
+  include_tasks: deployment.yml
+  when: operation == 'deployment'
+
+- name: Rolling back to the most recent release
+  include_tasks: rollback.yml
+  when: operation == 'rollback'
+
+- name: Cleaning up your old releases
+  include_tasks: cleanup.yml
+  when: (operation == 'deployment' or operation == 'rollback') and flavor == 'instances'
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_project_state ] }}"
+  when: store_state

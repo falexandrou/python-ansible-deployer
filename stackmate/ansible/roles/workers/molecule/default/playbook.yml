@@ -1,0 +1,84 @@
+---
+- name: Converge
+  hosts: all
+
+  roles:
+    - role: workers
+
+  pre_tasks:
+    - name: Adding a service to be terminated
+      include_tasks: ../../tasks/worker.yml
+      vars:
+        action: 'install'
+        workertemplatesdir: ../../templates
+        entry: "{{ terminations | first }}"
+
+  post_tasks:
+    - name: Populate service facts
+      service_facts:
+      register: system_services
+      no_log: yes
+
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    provider: aws
+    flavor: instances
+    deployment_path: /var/www/application
+    stage: production
+    providers:
+      aws:
+        access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+        secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+        token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+    provisions:
+      - id: dependency-worker-sidekiq
+        provision_params:
+          name: sidekiq
+          kind: sidekiq
+          configfile: config/resque.yml
+        group: workers
+
+      - id: dependency-worker-resque
+        provision_params:
+          name: resque
+          kind: resque
+        group: workers
+
+      - id: dependency-worker-celery
+        provision_params:
+          name: celery
+          kind: celery
+          appname: myapp.wsgi
+        group: workers
+
+      - id: dependency-worker-celerybeat
+        provision_params:
+          name: celerybeat
+          kind: celerybeat
+          appname: myapp.wsgi
+          stopcmd: 'explicit stop command'
+        group: application
+
+      - id: dependency-worker-runworker
+        provision_params:
+          name: runworker
+          kind: runworker
+          servicename: runworker
+          startcmd: /usr/bin/python manage.py runworker
+        group: application
+    modifications: []
+    terminations:
+      - id: dependency-worker-sidekiq2
+        provision_params:
+          name: sidekiq2
+          kind: sidekiq
+          servicename: sidekiq2
+          configfile: config/resque.yml
+        group: workers

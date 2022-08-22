@@ -1,0 +1,95 @@
+---
+# Querying Route53 for the records
+- name: Fetching Route53 records
+  delegate_to: localhost
+  route53_info:
+    query: record_sets
+    hosted_zone_id: "{{ hosted_zone_id }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    security_token: "{{ providers.aws.token }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+  register: dns_recordsets
+
+# Removing the verification DNS entries
+- name: Removing the identity domain related DNS entries
+  delegate_to: localhost
+  route53:
+    state: absent
+    hosted_zone_id: "{{ hosted_zone_id }}"
+    type: "{{ record.type }}"
+    record: "{{ record.name }}"
+    value: "{{ record.value }}"
+    ttl: "{{ record.ttl }}"
+    wait: no
+    aws_access_key: "{{ providers.aws.access_key }}"
+    security_token: "{{ providers.aws.token }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+  loop: "{{ dns_recordsets | ses_identity_records(item) }}"
+  loop_control:
+    loop_var: record
+  register: terminated_dns_records
+
+# Removing the SES emails
+- name: Removing email identities
+  delegate_to: localhost
+  aws_ses_identity:
+    identity: "{{ email }}"
+    state: absent
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    security_token: "{{ providers.aws.token }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+  loop: "{{ item.provision_params.emails }}"
+  loop_control:
+    loop_var: email
+  when: item.provision_params.emails is defined
+  register: terminated_ses_emails
+
+# Removing the SES domain identity
+- name: Removing domain identities
+  delegate_to: localhost
+  aws_ses_identity:
+    identity: "{{ item.provision_params.domain }}"
+    state: absent
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    security_token: "{{ providers.aws.token }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+  register: terminated_ses_domain
+
+# Remove the SNS topics
+- name: Removing Bounces SNS topic
+  delegate_to: localhost
+  sns_topic:
+    state: absent
+    name: "{{ item | sns_topic_name('bounces') }}"
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    security_token: "{{ providers.aws.token }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+  when: item.provision_params.faults is defined
+  register: terminated_sns_bounces
+
+- name: Removing Complaints SNS Topic
+  delegate_to: localhost
+  sns_topic:
+    state: absent
+    name: "{{ item | sns_topic_name('complaints') }}"
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    security_token: "{{ providers.aws.token }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+  when: item.provision_params.faults is defined
+  register: terminated_sns_complaints
+
+- name: Removing Delivery SNS Topic
+  delegate_to: localhost
+  sns_topic:
+    state: absent
+    name: "{{ item | sns_topic_name('deliveries') }}"
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    security_token: "{{ providers.aws.token }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+  when: item.provision_params.deliveries is defined
+  register: terminated_sns_deliveries

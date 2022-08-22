@@ -1,0 +1,30 @@
+---
+- name: Setting up the variables to append the created resources to
+  set_fact:
+    # we're using the same tasks in the molecule playbook so we need a way to resolve templates
+    templatesdir: ../templates
+    provision_items: "{{ provisions | default([]) + modifications | default([]) }}"
+    provision_results: []
+    termination_results: []
+
+- name: Setting the facts for the user's PATH
+  shell: ". {{ system_profile_script }} && . {{ profile_script }} && echo $PATH"
+  args:
+    executable: /bin/bash
+  changed_when: path_out.rc == 0
+  register: path_out
+  tags:
+    - skip_ansible_lint
+
+- name: Provisioning the systemd service & target
+  include_tasks: provisions.yml
+  loop: "{{ provision_items }}"
+
+- name: Removing the systemd service & target
+  include_tasks: terminations.yml
+  loop: "{{ terminations | default([]) }}"
+
+- name: Reloading the systemd daemon
+  become: yes
+  systemd:
+    daemon_reload: yes

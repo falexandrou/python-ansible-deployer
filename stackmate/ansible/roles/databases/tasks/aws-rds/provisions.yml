@@ -1,0 +1,10 @@
+---
+- name: Gathering facts about the deployed instances
+  set_fact:
+    rds_instances: []
+
+- name: Provisioning the database
+  include_tasks: provision-entry.yml
+  loop: "{{ provision_items }}"
+  loop_control:
+    loop_var: dbentry

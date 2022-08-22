@@ -1,0 +1,53 @@
+---
+- name: Converge
+  gather_facts: no
+  hosts: localhost
+  roles:
+    - role: cdn
+
+  post_tasks:
+    - name: Setting up the prerequisites for terminating Cloudfront distributions
+      include_tasks: ../../tasks/aws-cloudfront/before-termination.yml
+
+    - name: Terminating created resources
+      include_tasks: ../../tasks/aws-cloudfront/terminations.yml
+      loop: "{{ provisions }}"
+
+    - name: Storing output to a json file
+      delegate_to: localhost
+      no_log: true
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+
+  vars:
+    provider: aws
+    region: eu-central-1
+    hosted_zone_id: Z29S2FHXE4IGW6
+    providers:
+      aws:
+        access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+        secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+        token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+
+    provisions:
+      - id: service-cdn-abc123
+        provision_params:
+          name: molecule-test-cdn-with-aliases
+          origins:
+            # an origin with an alias
+            - path: /assets/provisioned1
+              domain: ezploy.eu
+              aliases:
+                - www.ezploy.eu
+
+      - id: service-cdn-abc321
+        provision_params:
+          name: molecule-test-cdn-without-aliases
+          origins:
+             # an origin with no alias
+            - path: /assets/provisioned2
+              domain: ezploy.eu
+
+    terminations: []

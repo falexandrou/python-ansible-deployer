@@ -1,0 +1,72 @@
+---
+- name: Creating a CORS configuration for the website
+  delegate_to: localhost
+  aws_s3_cors:
+    name: "{{ bucket.domain }}"
+    state: present
+    rules:
+      - allowed_origins: "{{ cors_domains | expand_cors_domains }}"
+        allowed_methods:
+          - POST
+          - PUT
+          - DELETE
+        allowed_headers:
+          - "*"
+        expose_headers:
+          - x-amz-server-side-encryption
+          - x-amz-request-id
+        max_age_seconds: 30
+      - allowed_origins:
+          - "*"
+        allowed_methods:
+          - GET
+          - HEAD
+        allowed_headers:
+          - "Content-*"
+          - "X-Amz-*"
+          - Host
+          - Authorization
+          - Origin
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  when: (cors_domains | length > 0) and (entry | is_cdn_enabled) and bucket.is_primary
+  loop: "{{ entry | s3_website_buckets | list }}"
+  loop_control:
+    loop_var: bucket
+  register: cors_configuration
+
+
+- name: Creating a CORS configuration for the bucket
+  delegate_to: localhost
+  aws_s3_cors:
+    name: "{{ entry | s3_bucket_name }}"
+    state: present
+    rules:
+      - allowed_origins: "{{ cors_domains | expand_cors_domains }}"
+        allowed_methods:
+          - POST
+          - PUT
+          - DELETE
+        allowed_headers:
+          - "*"
+        expose_headers:
+          - x-amz-server-side-encryption
+          - x-amz-request-id
+        max_age_seconds: 30
+      - allowed_origins:
+          - "*"
+        allowed_methods:
+          - GET
+          - HEAD
+        allowed_headers:
+          - "Content-*"
+          - "X-Amz-*"
+          - Host
+          - Authorization
+          - Origin
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  when: entry | is_public_bucket
+  register: cors_configuration

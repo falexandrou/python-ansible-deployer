@@ -1,0 +1,9 @@
+---
+- name: Setting up the prerequisites for the infrastructure on AWS
+  import_tasks: aws.yml
+  when: provider == 'aws'
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_prerequisites_state ] }}"
+  when: provider == 'aws' and store_state

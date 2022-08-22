@@ -1,0 +1,25 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: delegated
+lint:
+  name: yamllint
+platforms:
+  - name: instances-routing-role
+provisioner:
+  name: ansible
+  lint:
+    name: ansible-lint
+verifier:
+  name: testinfra
+  lint:
+    name: flake8
+scenario:
+  name: aws-alb-preview-domain
+  test_sequence:
+    - converge
+    - lint
+    - verify
+  converge_sequence:
+    - converge

@@ -1,0 +1,129 @@
+---
+framework: rails
+repository: git@github.com:stackmate-io/sample-app-rails.git
+provider: aws
+region: eu-central-1
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+  github:
+    access_key: "{{ lookup('env', 'STACKMATE_GITHUB_ID') }}"
+    secret: "{{ lookup('env', 'STACKMATE_GITHUB_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_GITHUB_TOKEN') }}"
+  slack:
+    secret: "{{ lookup('env', 'STACKMATE_SLACK_TOKEN') }}"
+  email:
+    host: smtp.sendgrid.net
+    port: 587
+    access_key: apikey
+    secret: "{{ lookup('env', 'STACKMATE_SENDGRID_TOKEN') }}"
+
+production:
+  branch: master
+  domain: rails.ezploy.eu
+  documentroot: /var/www/rails-app
+
+  environment:
+    CDN_HOST: cdn.ezploy.eu
+    RAILS_ENV: production
+    SECRET_KEY_BASE: 78e078fd223a2904d26de6b1d46a8418
+    MALLOC_ARENA_MAX: '2'
+
+  configfiles:
+    - source: production.master.key
+      target: config/master.key
+      application: true
+
+  pipeline:
+    build:
+      - mkdir -p /var/www/rails-app/cache/bundle/
+      - mkdir -p /var/www/rails-app/cache/node_modules/
+      - rsync -r /var/www/rails-app/cache/bundle/ ./vendor/bundle/
+      - ./bin/bundle install --deployment --without development test --jobs 10
+      - rsync -r ./vendor/ /var/www/rails-app/cache/
+      - rsync -r /var/www/rails-app/cache/node_modules/ ./
+      - ./bin/rails assets:precompile
+      - rsync -r ./node_modules/ /var/www/rails-app/cache/
+    db:migrate:
+      - ./bin/rails db:migrate
+    after:
+      restart:
+        - puma
+        - sidekiq
+      reload:
+        - nginx
+
+  statics:
+    - source: public/
+      bucket: rails-assets-ezploy-eu
+
+  services:
+    - name: rails-app-server
+      type: application
+      size: t2.micro
+      dependencies:
+        - type: ruby
+          version: 2.5.8
+          bundler: 1.16.6
+        - type: puma
+          configfile: config/puma.rb
+          port: 3000
+        - type: nginx
+        - type: sidekiq
+          configfile: config/sidekiq.yml
+        - type: nodejs
+      storage: 20
+
+    - name: rails-postgres-db
+      type: postgresql
+      version: '10.10'
+      size: db.t3.micro
+      storage: 20
+      databases:
+        - railsapp
+      environment:
+        POSTGRES_DB: railsapp
+        POSTGRES_USER: "{{username}}"
+        POSTGRES_HOST: "{{host}}"
+        POSTGRES_PASSWORD: "{{password}}"
+        POSTGRES_PORT: "{{port}}"
+
+    - name: rails-redis-cache
+      type: redis
+      size: cache.t2.micro
+      environment:
+        REDIS_URL: 'redis://{{host}}:{{port}}/1'
+
+    - name: mailer
+      type: mailer
+      domain: rails.ezploy.eu
+      emails:
+        - cloudwareventuresdotcom@gmail.com
+      environment:
+        SMTP_PORT: '{{port}}'
+        SMTP_HOST: '{{smtp_host}}'
+        SMTP_USERNAME: '{{smtp_username}}'
+        SMTP_PASSWORD: '{{smtp_password}}'
+        SMTP_DOMAIN: 'rails.ezploy.eu'
+
+    - type: elasticstorage
+      name: rails-assets-ezploy-eu
+      public: true
+      cdn: true
+      domain: cdn.ezploy.eu
+
+    - type: volumes
+      name: media-volume
+      mount: /opt/shared-media
+      groups:
+        - application
+
+# notifications:
+#   - type: email
+#     targets:
+#       - stackmateuser@mailinator.com
+
+#   - type: slack
+#     targets:
+#       - deployments-channel

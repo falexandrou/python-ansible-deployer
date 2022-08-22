@@ -1,0 +1,7 @@
+---
+- name: Setting the version
+  set_fact:
+    version: "{{ prov.provision_params.version | default(version)  | string }}"
+
+- import_tasks: ubuntu.yml
+  when: ansible_distribution.lower() == 'ubuntu'

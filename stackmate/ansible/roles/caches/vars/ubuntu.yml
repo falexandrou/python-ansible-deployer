@@ -1,0 +1,40 @@
+---
+client_packages:
+  memcached:
+    "1.5.16": &memcached_packages
+      - libmemcached-dev
+      - php-memcache
+      - php-memcached
+      - python3-memcache
+    "1.5.10":
+      - *memcached_packages
+    "1.4.34":
+      - *memcached_packages
+    "1.4.33":
+      - *memcached_packages
+    "1.4.24":
+      - *memcached_packages
+    "1.4.14":
+      - *memcached_packages
+    "1.4.5":
+      - *memcached_packages
+  redis:
+    "5.0.6": &redis_packages
+      - python-redis
+      - libhiredis-dev
+      - php-redis
+      - redis-tools
+      - ruby-hiredis
+      - ruby-redis
+    "5.0.5":
+      - *redis_packages
+    "5.0.4":
+      - *redis_packages
+    "5.0.3":
+      - *redis_packages
+    "5.0.0":
+      - *redis_packages
+    "4.0.10":
+      - *redis_packages
+    "3.2.10":
+      - *redis_packages

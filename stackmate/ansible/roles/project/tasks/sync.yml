@@ -1,0 +1,26 @@
+---
+- name: "Syncing {{ syncentry.source }} with {{ syncentry.bucket }}"
+  run_once: yes
+  s3_sync:
+    bucket: "{{ syncentry.bucket }}"
+    cache_control: "{{ static_sync_cache_control }}"
+    delete: yes
+    exclude: ".*"
+    include: "*"
+    file_root: "{{ release_path }}/{{ syncentry.source }}"
+    mode: push
+    permission: private
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    validate_certs: no
+  register: sync_static
+  loop: "{{ statics | default([]) }}"
+  loop_control:
+    loop_var: syncentry
+
+- name: Storing the sync output
+  set_fact:
+    sync_output: "{{ sync_output + sync_static.results }}"
+  when: sync_static is success

@@ -1,0 +1,9 @@
+---
+- name: Adding & modifying your configuration files
+  import_tasks: provision-configfiles-instances.yml
+  when: flavor == 'instances'
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_configfiles_state ] }}"
+  when: store_state

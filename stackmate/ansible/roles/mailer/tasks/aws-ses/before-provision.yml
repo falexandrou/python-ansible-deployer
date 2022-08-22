@@ -1,0 +1,71 @@
+---
+- name: Removing existing credentials
+  delegate_to: localhost
+  stackmate_aws_remove_access_keys:
+    iam_user: "{{ ses_iam_user | get_ses_username(domain) }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+
+- name: Creating an IAM user to be used for sending out emails
+  delegate_to: localhost
+  iam:
+    iam_type: user
+    state: present
+    access_key_state: create
+    key_count: 1
+    name: "{{ ses_iam_user | get_ses_username(domain) }}"
+    region: "{{ region }}"
+    update_password: always
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: ses_user
+
+- name: Granting SES access to the IAM user
+  delegate_to: localhost
+  iam_policy:
+    iam_type: user
+    iam_name: "{{ ses_iam_user | get_ses_username(domain) }}"
+    state: present
+    policy_name: "{{ domain | iam_policy_name }}"
+    policy_json: "{{ lookup( 'template', 'iam_policy.json.j2') }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: iam_user_policy
+  when: ses_user is changed
+
+- name: Fetching the information for the user
+  delegate_to: localhost
+  stackmate_aws_iam_user:
+    name: "{{ ses_iam_user | get_ses_username(domain) }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: iam_user
+
+- name: Setting the AWS SMTP credentials
+  delegate_to: localhost
+  stackmate_aws_smtp_credentials:
+    region: "{{ region }}"
+    access_key: "{{ ses_user.user_meta.access_keys.0.access_key_id }}"
+    secret_key: "{{ ses_user.user_meta.access_keys.0.secret_access_key }}"
+  when: ses_user is defined and ses_user.user_meta.access_keys.0.secret_access_key is defined
+  register: smtp_credentials
+
+- name: Setting the mailer credential facts
+  set_fact:
+    mailer_credentials_fact: "{{ {'iam': ses_user.user_meta.access_keys | default([]) | first | default({})} }}"
+  when: ses_user is defined and ses_user.user_meta
+
+- name: Setting the SMTP credentials facts
+  set_fact:
+    mailer_credentials_fact: "{{ mailer_credentials_fact | default({}) | combine({'smtp': smtp_credentials.result}) }}"
+  when: smtp_credentials is success and 'result' in smtp_credentials
+
+- name: Setting the generated credentials
+  set_fact:
+    stackmate_generated_credentials: "{{ stackmate_generated_credentials | default([]) + [{'mailer': mailer_credentials_fact}] }}"

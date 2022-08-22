@@ -1,0 +1,99 @@
+---
+- name: Creating the list of domains to enable CORS for
+  set_fact:
+    cors_domains:
+      - "{{ domain }}"
+
+- name: Creating a Cloudfront origin access identity
+  delegate_to: localhost
+  cloudfront_origin_access_identity:
+    caller_reference: "{{ entry.provision_params.name }}-oai"
+    comment: "Cloudfront Origin Access Identity for {{ entry.provision_params.name }} by Stackmate"
+    region: "{{ region }}"
+    state: present
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  when: entry | is_cdn_enabled
+  register: origin_access_identity
+
+# Due to this:
+# https://stackoverflow.com/questions/37108006/amazon-aws-s3-oai-access-control/37111791#37111791
+- name: Waiting for the Cloudfront origin access identity to become available
+  pause:
+    seconds: 10
+  when: origin_access_identity is changed
+
+- name: Creating the AWS S3 bucket
+  delegate_to: localhost
+  s3_bucket:
+    state: present
+    name: "{{ entry | s3_bucket_name }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    versioning: yes
+    policy: "{{ lookup('template', 'bucket_policy.json.j2') }}"
+    tags:
+      Name: "{{ entry.provision_params.name }}"
+      Environment: "{{ stage }}"
+  when: not (entry | is_website)
+  register: bucket_deployed
+  vars:
+    resource_name: "{{ entry | s3_bucket_name }}"
+
+- name: Creating an AWS S3 website
+  include_tasks: website-buckets.yml
+  when: entry | is_website
+  loop: "{{ entry | s3_website_buckets | list }}"
+  loop_control:
+    loop_var: bucket
+
+- name: Adding the DNS records for the redirection buckets
+  delegate_to: localhost
+  route53:
+    state: present
+    hosted_zone_id: "{{ hosted_zone_id }}"
+    alias: yes
+    # taken from https://github.com/blueimp/shell-scripts/blob/master/bin/aws-website-redirect.sh#L30
+    alias_hosted_zone_id: "{{ s3_hosted_zone_ids[entry.provision_params.region] }}"
+    type: A
+    record: "{{ rec.record }}"
+    value: "{{ rec.value }}"
+    ttl: "{{ dns_records_ttl }}"
+    wait: yes
+    overwrite: yes
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  loop: "{{ entry | s3_dns_records }}"
+  loop_control:
+    loop_var: rec
+  register: bucket_dns_records
+
+- name: Provisioning the Cloudfront distribution
+  include_role:
+    name: cdn
+  when: (entry | is_cdn_enabled) and origin_access_identity is succeeded
+  vars:
+    store_state: no
+    provisions: "{{ entry | get_cdn_provision_params(origin_access_identity.cloud_front_origin_access_identity.id) }}"
+    modifications: []
+    terminations: []
+
+# CORS
+- name: Adding Cloudfront domains to the list of domains to enable CORS for
+  set_fact:
+    cors_domains: "{{ (cors_domains | default([])) + (cloudfront_distributions.results | map(attribute='domain_name') | list) }}"
+  when: cloudfront_distributions is defined and cloudfront_distributions is success
+
+- name: Setting up CORS for the bucket
+  include_tasks: cors.yml
+  when: cors_domains | length > 0
+
+- name: Storing the created resources to the list
+  set_fact:
+    created_origin_identities: "{{ created_origin_identities | default([]) + [origin_access_identity] }}"
+    elasticstorage_bucket_results: "{{ elasticstorage_bucket_results | default([]) + [bucket_deployed] }}"
+    created_dns_records: "{{ created_dns_records | default([]) + [bucket_dns_records] }}"

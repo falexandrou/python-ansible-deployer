@@ -1,0 +1,166 @@
+---
+- name: Setting the default values for the SNS topics
+  set_fact:
+    bounce_notifications: {}
+    complaint_notifications: {}
+    delivery_notifications: {}
+
+- block:
+  - name: Creating Bounces SNS Topic
+    delegate_to: localhost
+    sns_topic:
+      state: present
+      name: "{{ item | sns_topic_name('bounces') }}"
+      display_name: "Email Bounces for {{ item.provision_params.domain }}"
+      region: "{{ item.provision_params.region | default(region) }}"
+      aws_access_key: "{{ providers.aws.access_key }}"
+      aws_secret_key: "{{ providers.aws.secret }}"
+      security_token: "{{ providers.aws.token }}"
+      subscriptions: "{{ [{'endpoint': item.provision_params.faults, 'protocol': 'email'}] if item.provision_params.faults else [] }}"
+    when: '"faults" in item.provision_params and item.provision_params.faults'
+    register: sns_bounces
+
+  - name: Setting the bounces SNS topic
+    set_fact:
+      bounce_notifications:
+        topic: "{{ sns_bounces.sns_arn }}"
+    when: sns_bounces and sns_bounces is success and "sns_arn" in sns_bounces
+
+  - name: Creating Complaints SNS Topic
+    delegate_to: localhost
+    sns_topic:
+      state: present
+      name: "{{ item | sns_topic_name('complaints') }}"
+      display_name: "Email Complaints for {{ item.provision_params.domain }}"
+      region: "{{ item.provision_params.region | default(region) }}"
+      aws_access_key: "{{ providers.aws.access_key }}"
+      aws_secret_key: "{{ providers.aws.secret }}"
+      security_token: "{{ providers.aws.token }}"
+      subscriptions: "{{ [{'endpoint': item.provision_params.faults, 'protocol': 'email'}] if item.provision_params.faults else [] }}"
+    when: '"complaints" in item.provision_params and item.provision_params.complaints'
+    register: sns_complaints
+
+  - name: Setting the complaints SNS topic
+    set_fact:
+      complaint_notifications:
+        topic: "{{ sns_complaints.sns_arn }}"
+    when: sns_complaints and sns_complaints is success and "sns_arn" in sns_complaints
+
+  - name: Creating Delivery SNS Topic
+    delegate_to: localhost
+    sns_topic:
+      state: present
+      name: "{{ item | sns_topic_name('deliveries') }}"
+      display_name: "Email Deliveries for {{ item.provision_params.domain }}"
+      region: "{{ item.provision_params.region | default(region) }}"
+      aws_access_key: "{{ providers.aws.access_key }}"
+      aws_secret_key: "{{ providers.aws.secret }}"
+      security_token: "{{ providers.aws.token }}"
+      subscriptions: "{{ [{'endpoint': item.provision_params.deliveries, 'protocol': 'email'}] if item.provision_params.deliveries else [] }}"
+    when: '"deliveries" in item.provision_params and item.provision_params.deliveries'
+    register: sns_deliveries
+
+  - name: Setting the complaints SNS topic
+    set_fact:
+      delivery_notifications:
+        topic: "{{ sns_deliveries.sns_arn }}"
+    when: sns_deliveries and sns_deliveries is success and "sns_arn" in sns_deliveries
+
+  - name: Adding an SES domain to be verified
+    delegate_to: localhost
+    aws_ses_identity:
+      identity: "{{ item.provision_params.domain }}"
+      state: present
+      bounce_notifications: "{{ bounce_notifications | default({}) }}"
+      complaint_notifications: "{{ complaint_notifications | default({}) }}"
+      delivery_notifications: "{{ delivery_notifications | default({}) }}"
+      region: "{{ item.provision_params.region | default(region) }}"
+      aws_access_key: "{{ providers.aws.access_key }}"
+      aws_secret_key: "{{ providers.aws.secret }}"
+      security_token: "{{ providers.aws.token }}"
+    register: ses_domain
+
+  - name: Adding the emails to be verified
+    delegate_to: localhost
+    aws_ses_identity:
+      identity: "{{ email }}"
+      state: present
+      bounce_notifications: "{{ bounce_notifications | default({}) }}"
+      complaint_notifications: "{{ complaint_notifications | default({}) }}"
+      delivery_notifications: "{{ delivery_notifications | default({}) }}"
+      region: "{{ item.provision_params.region | default(region) }}"
+      aws_access_key: "{{ providers.aws.access_key }}"
+      aws_secret_key: "{{ providers.aws.secret }}"
+      security_token: "{{ providers.aws.token }}"
+    ignore_errors: yes
+    register: ses_emails
+    loop: "{{ item.provision_params.emails }}"
+    loop_control:
+      loop_var: email
+    when: item.provision_params.emails | length > 0
+
+  - name: Adding sending authorization policy to the SES domain
+    delegate_to: localhost
+    aws_ses_identity_policy:
+      identity: "{{ item.provision_params.domain }}"
+      policy_name: "{{ domain | iam_policy_name }}-ses"
+      policy: "{{ lookup('template', 'ses_policy.json.j2') }}"
+      state: present
+      region: "{{ item.provision_params.region | default(region) }}"
+      aws_access_key: "{{ providers.aws.access_key }}"
+      aws_secret_key: "{{ providers.aws.secret }}"
+      security_token: "{{ providers.aws.token }}"
+    register: ses_sending_policy
+    when: iam_user is defined and iam_user is success
+
+  # Verification + DKIM
+  - name: Adding the verification DNS entry in Route53
+    delegate_to: localhost
+    route53:
+      state: present
+      hosted_zone_id: "{{ hosted_zone_id }}"
+      type: TXT
+      record: "_amazonses.{{ item.provision_params.domain }}"
+      value: '"{{ ses_domain.verification_attributes.verification_token }}"'
+      ttl: "{{ dns_ttl }}"
+      wait: yes
+      aws_access_key: "{{ providers.aws.access_key }}"
+      aws_secret_key: "{{ providers.aws.secret }}"
+      security_token: "{{ providers.aws.token }}"
+    register: verification_records
+
+  - name: Enabling DKIM for the SES identity
+    delegate_to: localhost
+    stackmate_aws_ses_dkim:
+      state: present
+      hosted_zone_id: "{{ hosted_zone_id }}"
+      region: "{{ item.provision_params.region | default(region) }}"
+      identity: "{{ item.provision_params.domain }}"
+      domain: "{{ item.provision_params.domain }}"
+      aws_access_key: "{{ providers.aws.access_key }}"
+      aws_secret_key: "{{ providers.aws.secret }}"
+      security_token: "{{ providers.aws.token }}"
+    register: dkim_records
+
+  - name: Enabling "mailer.{{ item.provision_params.domain }}" as a MAIL FROM domain
+    delegate_to: localhost
+    stackmate_aws_ses_mailfrom:
+      state: present
+      hosted_zone_id: "{{ hosted_zone_id }}"
+      region: "{{ item.provision_params.region | default(region) }}"
+      domain: "{{ item.provision_params.domain }}"
+      aws_access_key: "{{ providers.aws.access_key }}"
+      aws_secret_key: "{{ providers.aws.secret }}"
+      security_token: "{{ providers.aws.token }}"
+    register: mail_from_records
+
+  - name: Storing the resources created
+    set_fact:
+      sns_bounce_topics: "{{ sns_bounce_topics + [sns_bounces] }}"
+      sns_complaints_topics: "{{ sns_complaints_topics + [sns_complaints] }}"
+      sns_deliveries_topics: "{{ sns_deliveries_topics + [sns_deliveries] }}"
+      ses_domains: "{{ ses_domains + [ses_domain] }}"
+      ses_emails_list: "{{ ses_emails_list + [ses_emails] }}"
+      verifications_list: "{{ verifications_list + [verification_records] }}"
+      dkims_list: "{{ dkims_list + [dkim_records] }}"
+      mail_from_list: "{{ mail_from_list + [mail_from_records] }}"

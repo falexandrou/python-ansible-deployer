@@ -1,0 +1,22 @@
+---
+- name: Setting the facts for the notifications
+  set_fact:
+    emojis: "{{ status_emojis[deployment_status] | default(status_emojis.success) }}"
+    colors: "{{ status_colors[deployment_status] | default(status_colors.success) }}"
+    notifications_output:
+      slack: []
+      email: []
+
+- name: Notifying the team via Slack
+  include_tasks: slack.yml
+  loop: "{{ notifications }}"
+  loop_control:
+    loop_var: notification
+  when: notification.type == 'slack'
+
+- name: Notifying the team via Email
+  include_tasks: email.yml
+  loop: "{{ notifications }}"
+  loop_control:
+    loop_var: notification
+  when: notification.type == 'email'

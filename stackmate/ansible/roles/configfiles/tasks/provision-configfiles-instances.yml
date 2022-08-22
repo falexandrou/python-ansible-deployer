@@ -1,0 +1,46 @@
+---
+- name: Setting the configuration files to be provisioned
+  set_fact:
+    provisionable_files: "{{ (provisions | default([]) + modifications | default([])) | get_items_with_absolute_paths(application_cfg_path, files_source) }}"
+    terminatable_files: "{{ terminations | default([]) | get_items_with_absolute_paths(application_cfg_path, files_source) }}"
+
+- name: Making sure the target directories exist
+  become: yes
+  file:
+    state: directory
+    path: "{{ cfg.provision_params.target | dirname }}"
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+    recurse: yes
+  loop: "{{ provisionable_files }}"
+  loop_control:
+    loop_var: cfg
+
+- name: Provisioning configuration files
+  become: yes
+  copy:
+    src: "{{ cfg.provision_params.source }}"
+    dest: "{{ cfg.provision_params.target }}"
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+    force: yes
+  loop: "{{ provisionable_files }}"
+  when: inventory_hostname in groups.get(cfg.group, {})
+  loop_control:
+    loop_var: cfg
+  register: provisioned
+
+- name: Removing unused files
+  become: yes
+  file:
+    path: "{{ cfg.provision_params.target }}"
+    state: absent
+  loop: "{{ terminatable_files }}"
+  when:  inventory_hostname in groups.get(cfg.group, {})
+  loop_control:
+    loop_var: cfg
+  register: removed_files
+
+- name: Gathering facts about the created and modified files
+  set_fact:
+    provisioned_files: "{{ provisioned.results }}"

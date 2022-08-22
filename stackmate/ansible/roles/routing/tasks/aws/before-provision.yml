@@ -1,0 +1,47 @@
+---
+- name: Fetching the information for the default security group
+  delegate_to: localhost
+  ec2_group_info:
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    filters:
+      vpc-id: "{{ vpc_id }}"
+      group-name: default
+  register: default_sg_results
+
+- name: Setting the facts for the default security group
+  set_fact:
+    default_sg: "{{ default_sg_results.security_groups | default([]) | first | default({}) }}"
+
+- name: Fetching SSL certificates from Certificate Manager
+  delegate_to: localhost
+  aws_acm_info:
+    region: "{{ region }}" # SSL certificates for cloudfront should be deployed in us-east-1 region
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: ssl_certificates
+
+- name: Creating a security group for the load balancer
+  delegate_to: localhost
+  ec2_group:
+    name: "{{ elb_security_group_name }}"
+    description: Allow incoming connections to the load balancer
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    purge_rules: yes
+    purge_tags: yes
+    # these are inbound rules only, by default all outbound traffic is allowed
+    rules:
+      - proto: tcp
+        ports: "{{ loadbalancer_ports }}"
+        cidr_ip: 0.0.0.0/0
+        rule_desc: Accept
+    tags:
+      Name: "{{ elb_security_group_name }}"
+  register: elb_sg

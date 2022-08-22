@@ -1,0 +1,13 @@
+---
+- name: Removing obsolete crontab
+  become: yes
+  cron:
+    name: "{{ item.provision_params.command }}"
+    job: "{{ item.provision_params.command }}"
+    state: absent
+    user: "{{ deployment_user }}"
+  register: cron_termination
+
+- name: Storing the terminated crontab
+  set_fact:
+    termination_results: "{{ termination_results | default([]) + [cron_termination] }}"

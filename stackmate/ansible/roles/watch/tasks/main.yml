@@ -1,0 +1,19 @@
+---
+
+- name: Setting the initial facts
+  set_fact:
+    watch_lines: 0
+    watch_count: 0
+  tags:
+    - ignore_empty_output
+
+- name: watch_poll
+  include_tasks: recursive.yml
+  tags:
+    - ignore_empty_output
+
+- name: Making sure the process was finished
+  assert:
+    that: watch_status.finished
+  tags:
+    - ignore_empty_output

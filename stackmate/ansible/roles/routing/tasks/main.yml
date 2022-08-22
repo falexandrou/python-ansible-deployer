@@ -1,0 +1,32 @@
+---
+- name: Setting facts to be populated with provisions and terminations
+  set_fact:
+    provision_items: "{{ provisions | default([]) + modifications | default([]) }}"
+    provision_results: []
+    termination_results: []
+    provisioned_dns_records: []
+    terminated_dns_records: []
+    default_sg: {}
+
+- name: Setting the facts for the provisioning mode
+  set_fact:
+    instance_ids: "{{ provision_items | map(attribute='provision_params') | sum(attribute='target_instances', start=[]) | list }}"
+
+- name: Provisioning AWS Elastic Load balancers
+  block:
+    - name: Creating the resources required for the Elastic Load balancers
+      import_tasks: aws/before-provision.yml
+
+    - name: Provisioning the Elastic Load balancers
+      include_tasks: aws/provisions.yml
+      loop: "{{ provision_items }}"
+
+    - name: Terminating redundant Elastic load balancers
+      include_tasks: aws/terminations.yml
+      loop: "{{ terminations | default([]) }}"
+
+    - name: Setting the state for Stackmate
+      set_fact:
+        stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_routing_state ] }}"
+      when: store_state
+  when: provider == 'aws'

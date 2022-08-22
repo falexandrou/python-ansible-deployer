@@ -1,0 +1,110 @@
+---
+- name: Prepare instances
+  hosts: localhost
+  gather_facts: no
+
+  vars:
+    keypair_name: molecule-test
+    vpc_id: vpc-09ebb623125812dd5
+    main_vpc_subnet_id: subnet-02eacc03ad59e4568
+    stage: molecule-test
+    provider: aws
+    flavor: instances
+    region: eu-central-1
+    public_key: "{{ lookup('file', '../../../../../../tests/ssh-keys/stackmate-sample-key.pub') }}"
+
+  tasks:
+    - name: Launching EC2 instances
+      include_role:
+        name: instances
+      vars:
+        store_state: no
+        provisions:
+          - id: service-instances-appserver
+            group: application
+            provision_params:
+              kind: application
+              name: application-server
+              port: 80
+              provider: aws
+              size: t2.nano
+              storage: 16
+              region: eu-central-1
+              configfiles: []
+        modifications: []
+        terminations: []
+
+- name: Converge
+  hosts: provisionables
+  gather_facts: yes
+
+  roles:
+    - role: volumes
+
+  post_tasks:
+    - name: Running terminations (that require manual intervention)
+      include_tasks: ../../tasks/aws-efs/terminations.yml
+      vars:
+        terminations:
+          - id: services-volumes-app-server
+            provision_params:
+              name: application-server-volume
+              mount: /mnt/photos
+              region: eu-central-1
+              groups:
+                - application
+                - workers
+
+    - name: Terminating EC2 instances
+      include_role:
+        name: instances
+      vars:
+        store_state: no
+        terminations:
+          - group: application
+            provision_params:
+              configfiles: []
+              kind: application
+              name: application-server
+              port: 80
+              provider: aws
+              size: t2.nano
+              storage: 16
+              region: eu-central-1
+        modifications: []
+        provisions: []
+
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    keypair_name: molecule-test
+    vpc_id: vpc-09ebb623125812dd5
+    main_vpc_subnet_id: subnet-02eacc03ad59e4568
+    stage: molecule-test
+    provider: aws
+    flavor: instances
+    region: eu-central-1
+    public_key: "{{ lookup('file', '../../../../../../tests/ssh-keys/stackmate-sample-key.pub') }}"
+    ansible_ssh_user: ubuntu
+    ansible_ssh_private_key_file: '../../../../../../tests/ssh-keys/stackmate-sample-key'
+    deployment_user: ubuntu
+    deployment_group: ubuntu
+    # important if we need the filesystems to be removed
+    termination_confirmed: true
+    provisions:
+      - id: services-volumes-app-server
+        provision_params:
+          name: application-server-volume
+          mount: /mnt/photos
+          region: eu-central-1
+          groups:
+            - application
+            - workers
+    modifications: []
+    terminations: []

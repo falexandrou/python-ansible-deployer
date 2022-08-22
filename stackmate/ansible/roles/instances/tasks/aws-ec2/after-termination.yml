@@ -1,0 +1,55 @@
+---
+- name: Fetching information about your EC2 instances
+  delegate_to: localhost
+  ec2_instance_info:
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    region: "{{ region }}"
+    filters:
+      instance-state-name:
+        # exclude the state name: terminated and shutting-down
+        - pending
+        - running
+        - stopping
+        - stopped
+  register: remaining_instances
+
+- debug:
+    msg: "{{ remaining_instances }}"
+
+- name: Cleaning up the security groups and keypair
+  block:
+    - name: Destroying the security group that allows access to Stackmate via SSH
+      delegate_to: localhost
+      ec2_group:
+        name: "{{ stackmate_ssh_security_group }}"
+        region: "{{ region }}"
+        state: absent
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+      register: terminated_stackmate_sg
+
+    - name: Destroying the security group that allows access from within the VPC
+      delegate_to: localhost
+      ec2_group:
+        name: "{{ application_security_group }}"
+        region: "{{ region }}"
+        state: absent
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+      register: terminated_application_sg
+
+    - name: Destroying the SSH keypair
+      delegate_to: localhost
+      ec2_key:
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+        name: "{{ keypair_name }}"
+        region: "{{ region }}"
+        state: absent
+      register: terminated_keypair
+  when: remaining_instances.instances | length == 0

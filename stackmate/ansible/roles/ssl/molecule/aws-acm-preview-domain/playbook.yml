@@ -1,0 +1,42 @@
+---
+- name: Converge
+  gather_facts: no
+  hosts: localhost
+
+  roles:
+    - role: ssl
+
+  post_tasks:
+    - name: Terminating created resources
+      include_tasks: ../../tasks/aws-acm/terminations.yml
+      with_items: "{{ provisions }}"
+      register: post_tasks_terminated_ssl_certificates
+
+    - name: Storing output to a json file
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      delegate_to: localhost
+
+  vars:
+    provider: aws
+    hosted_zone_id: Z07761352EB7CVQKU7QC2
+    region: eu-central-1
+    provisions:
+      - id: utility-ssl-1
+        provision_params:
+          region: eu-central-1
+          is_cdn_certificate: True
+          domains:
+            - "ssl-molecule-test.myappis.live"
+        group: application
+
+      - id: utility-ssl
+        provision_params:
+          region: eu-central-1
+          domains:
+            - "ssl-molecule-test.myappis.live"
+        group: application
+
+    terminations: []

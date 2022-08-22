@@ -1,0 +1,19 @@
+---
+- name: Set timezone
+  become: yes
+  timezone:
+    name: "{{ timezone }}"
+
+- name: Ensure NTP is enabled & running
+  become: yes
+  service:
+    name: "{{ ntp_daemon }}"
+    state: started
+    enabled: true
+
+- name: Generate ntp.conf file
+  become: yes
+  template:
+    src: ntp.conf.j2
+    dest: /etc/ntp.conf
+  notify: restart ntp

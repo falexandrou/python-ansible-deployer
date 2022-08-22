@@ -1,0 +1,99 @@
+---
+- name: Converge
+  hosts: all
+  roles:
+    - role: systemd
+
+  pre_tasks:
+    - name: Reloading the systemd daemon
+      become: yes
+      systemd:
+        daemon_reload: yes
+
+    - name: Creating a systemd service to be terminated
+      include_tasks: ../../tasks/provisions.yml
+      vars:
+        item: "{{ terminations | first }}"
+        templatesdir: ../../templates
+        # we're hitting provisions file directly, so we need to
+        # prepare the vars registered before that
+        path_out:
+          stdout: ""
+
+  post_tasks:
+    - name: Populate service facts
+      service_facts:
+      register: system_services
+
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    working_directory: /var/www/application/current
+    provisions:
+      - provision_params:
+          name: sidekiq
+          kind: systemd
+          description: Sidekiq efficient background processing service
+          servicename: sidekiq
+          target: yes
+          socket: no
+          enabled: yes
+          startcmd: /bin/bash -lc '/usr/bin/bundle exec sidekiq -e production'
+          stopcmd: /usr/bin/kill -TSTP $MAINPID
+          reloadcmd: null
+          config:
+            after: syslog.target network.target
+            requires: syslog.target network.target
+            process_type: simple
+            env_file: /etc/conf.d/stackmate.env
+            kill_mode: process
+            environment:
+              MALLOC_ARENA_MAX: 2
+        group: application
+
+      - provision_params:
+          name: celery
+          kind: systemd
+          servicename: celery
+          description: Celery Distributed Task Queue service
+          target: yes
+          socket: yes
+          enabled: yes
+          startcmd: "/bin/sh -c 'celery multi start'"
+          stopcmd: "/bin/sh -c 'celery multi stopwait'"
+          reloadcmd: "/bin/sh -c 'celery multi restart'"
+          config:
+            after: syslog.target network.target
+            requires: syslog.target network.target
+            env_file: /etc/conf.d/stackmate.env
+            kill_mode: process
+            process_type: forking
+        group: application
+
+    modifications: []
+
+    terminations:
+      - provision_params:
+          name: celerybeat
+          kind: systemd
+          servicename: celerybeat
+          description: Celery beat Distributed Task Scheduling
+          target: yes
+          socket: no
+          enabled: yes
+          startcmd: "/bin/sh -c 'celery beat start'"
+          stopcmd: "/bin/sh -c 'celery beat stopwait'"
+          reloadcmd: "/bin/sh -c 'celery beat restart'"
+          config:
+            after: syslog.target network.target
+            requires: syslog.target network.target
+            env_file: /etc/conf.d/stackmate.env
+            kill_mode: process
+            process_type: forking
+        group: application

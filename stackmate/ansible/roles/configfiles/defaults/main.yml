@@ -1,0 +1,8 @@
+---
+flavor: instances
+deployment_user: stackmate
+deployment_group: stackmate
+deployment_path: /var/www/application
+store_state: yes
+files_source: ''
+application_cfg_path: "{{ deployment_path }}/configurations"

@@ -1,0 +1,51 @@
+---
+- name: Checking the async job status
+  become: "{{ watch_become }}"
+  async_status:
+    jid: "{{ job.ansible_job_id }}"
+  vars:
+    job: "{{ lookup('vars', watch_job) }}"
+  when: job.ansible_job_id is defined
+  register: watch_status
+  changed_when: false
+  # allow failed commands to proceed to show the final output
+  # failed_when: false
+  tags:
+    - ignore_empty_output
+
+- name: command live output
+  become: "{{ watch_become }}"
+  shell: "tail -n +{{ watch_lines }} {{ watch_file }}"
+  register: watch_tail
+  failed_when: false
+  changed_when: false
+  tags:
+    - live_output
+
+- name: Setting the output facts
+  set_fact:
+    watch_output: "{{ watch_tail.stdout_lines | default([]) }}"
+  tags:
+    - ignore_empty_output
+
+# This allows us to fail when the async command has failed in the background
+# but still be able to get a final output
+- name: non-zero return code in command execution
+  fail:
+    msg: "{{ [watch_output | join('\n'), watch_status.stdout, watch_status.stderr] | join('\n') }}"
+  when: watch_status.finished and watch_status.rc > 1
+  tags:
+    - ignore_empty_output
+
+- name: Setting the output lines
+  set_fact:
+    watch_output_lines: "{{ watch_output | length | int }}"
+  tags:
+    - ignore_empty_output
+
+- name: Setting the lines captured
+  set_fact:
+    watch_lines: '{{ watch_lines|int + watch_output_lines|int }}'
+  when: (watch_output_lines | int) > 0
+  tags:
+    - ignore_empty_output

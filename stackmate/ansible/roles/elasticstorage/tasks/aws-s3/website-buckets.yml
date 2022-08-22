@@ -1,0 +1,55 @@
+---
+- name: Creating the AWS S3 bucket
+  delegate_to: localhost
+  s3_bucket:
+    state: present
+    name: "{{ bucket.domain }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    versioning: yes
+    policy: "{{ lookup('template', 'bucket_policy.json.j2') }}"
+    tags:
+      Name: "{{ entry.provision_params.name }}"
+      Environment: "{{ stage }}"
+  register: bucket_deployed
+  vars:
+    resource_name: "{{ bucket.domain }}"
+
+- name: Making the bucket a website one
+  delegate_to: localhost
+  s3_website:
+    name: "{{ bucket.domain }}"
+    state: present
+    suffix: "{{ bucket.get('directory_index') | default(omit) }}"
+    error_key: "{{ bucket.get('error_page') | default(omit) }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  when: bucket.is_primary
+  register: bucket_website
+
+- name: Making the bucket a redirection one
+  delegate_to: localhost
+  s3_website:
+    name: "{{ bucket.domain }}"
+    state: present
+    redirect_all_requests: "{{ bucket.get('redirect_to') | default(omit) }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  when: not bucket.is_primary
+  register: bucket_website
+
+- name: Adding the primary domain name to the list of domains to enable CORS for
+  set_fact:
+    cors_domains: "{{ (cors_domains | default([])) + [bucket.domain] }}"
+  when: bucket.is_primary
+
+- name: Storing the created resources to the list
+  set_fact:
+    elasticstorage_bucket_results: "{{ elasticstorage_bucket_results | default([]) + [bucket_deployed] }}"
+    created_webites: "{{ created_webites | default([]) + [bucket_website] }}"

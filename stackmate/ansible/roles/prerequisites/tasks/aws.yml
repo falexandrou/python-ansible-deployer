@@ -1,0 +1,162 @@
+---
+# Create a VPC
+- name: Creating a VPC
+  delegate_to: localhost
+  ec2_vpc_net:
+    name: "{{ vpc_name }}"
+    cidr_block: "{{ vpc_cidr }}"
+    region: "{{ region }}"
+    dns_hostnames: yes
+    dns_support: yes
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    state: present
+    tenancy: default
+  register: vpc_output
+
+# Create a VPC subnet id
+- name: Associating the main subnet to the VPC
+  delegate_to: localhost
+  ec2_vpc_subnet:
+   state: present
+   vpc_id: "{{ vpc_output.vpc.id }}"
+   region: "{{ region }}"
+   az: "{{ region }}a"
+   cidr: "{{ main_subnet_cidr }}"
+   aws_access_key: "{{ providers.aws.access_key }}"
+   aws_secret_key: "{{ providers.aws.secret }}"
+   security_token: "{{ providers.aws.token }}"
+   map_public: yes
+   resource_tags:
+     Name: "{{ subnet_name }}"
+  register: main_subnet
+
+- name: Adding an alternative subnet to the VPC
+  delegate_to: localhost
+  ec2_vpc_subnet:
+   state: present
+   vpc_id: "{{ vpc_output.vpc.id }}"
+   region: "{{ region }}"
+   az: "{{ region }}b"
+   cidr: "{{ alt_subnet_cidr }}"
+   aws_access_key: "{{ providers.aws.access_key }}"
+   aws_secret_key: "{{ providers.aws.secret }}"
+   security_token: "{{ providers.aws.token }}"
+   map_public: yes
+   resource_tags:
+     Name: "{{ alt_subnet_name }}"
+  register: alt_subnet
+
+# Create an internet gateway
+- name: Creating an Internet Gateway
+  delegate_to: localhost
+  ec2_vpc_igw:
+    vpc_id: "{{ vpc_output.vpc.id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    state: "present"
+    tags:
+      Name: "{{ gateway_name }}"
+  register: gateway
+
+- name: Creating an Internet Gateway Route Table
+  delegate_to: localhost
+  ec2_vpc_route_table:
+    vpc_id: "{{ vpc_output.vpc.id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    subnets:
+      - "{{ main_subnet.subnet.id }}"
+      - "{{ alt_subnet.subnet.id }}"
+    routes:
+      - dest: 0.0.0.0/0
+        gateway_id: "{{ gateway.gateway_id  }}"
+    tags:
+      Name: "{{ route_name }}"
+  register: route_table
+
+- name: Creating a Route53 zone for your domain
+  delegate_to: localhost
+  route53_zone:
+    zone: "{{ domain | get_top_level_domain(preview_domain) }}"
+    comment: Deployed via Stackmate.io
+    state: present
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: hosted_zone
+
+- name: Fetching your DNS nameservers
+  delegate_to: localhost
+  route53_info:
+    type: NS
+    query: record_sets
+    hosted_zone_id: "{{ hosted_zone.zone_id }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    start_record_name: "{{ domain }}"
+  register: ns_records
+  when: hosted_zone is defined
+
+- name: Setting the name server records for the Stackmate.io entry
+  set_fact:
+    hosted_zone_ns_records: "{{ ns_records | extract_ns_records | sort | join(',') }}"
+  when: ns_records is defined
+
+- name: Registering your nameservers with Stackmate.io
+  delegate_to: localhost
+  route53:
+    state: present
+    type: NS
+    record: "{{ domain }}"
+    value: "{{ hosted_zone_ns_records }}"
+    ttl: "60"
+    overwrite: yes
+    hosted_zone_id: "{{ preview_domain_hosted_zone_id }}"
+    aws_access_key: "{{ providers.rootaws.access_key }}"
+    aws_secret_key: "{{ providers.rootaws.secret }}"
+  when: domain.endswith(preview_domain) and hosted_zone_ns_records is defined
+  register: stackmate_hosted_entries
+
+- name: Fetching the information for the default security group
+  delegate_to: localhost
+  ec2_group_info:
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    filters:
+      vpc-id: "{{ vpc_output.vpc.id }}"
+      group-name: default
+  register: default_sg_results
+
+- name: Setting the facts for the default security group
+  set_fact:
+    default_sg: "{{ default_sg_results.security_groups | default([]) | first | default({}) }}"
+
+- name: Setting facts for vpc
+  set_fact:
+    vpc_id: "{{ vpc_output.vpc.id }}"
+    default_sg_id: "{{ default_sg.group_id }}"
+    vpc_cidr: "{{ vpc_output.vpc.cidr_block }}"
+    main_vpc_subnet_id: "{{ main_subnet.subnet.id }}"
+    alternative_vpc_subnet_id: "{{ alt_subnet.subnet.id }}"
+    route_table_id: "{{ route_table.route_table.id }}"
+    internet_gateway_id: "{{ gateway.gateway_id }}"
+    hosted_zone_id: "{{ hosted_zone.zone_id }}"
+    ns_records: "{{ ns_records | route53_ns_records }}"
+    # facts that concern the user
+
+- name: Setting the user action
+  set_fact:
+    pending_user_action: "{{ {'key': 'ns_records', 'value': ns_records } }}"
+
+- name: Setting the facts for user generated actions
+  set_fact:
+    stackmate_user_action: "{{ stackmate_user_action | default([]) + [pending_user_action] }}"

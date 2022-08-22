@@ -1,0 +1,24 @@
+---
+- name: Parsing the crontab frequency
+  set_fact:
+    cron_frequency: "{{ item.provision_params.frequency | parse_cron_frequency }}"
+
+- name: Installing crontab
+  become: yes
+  run_once: "{{ crons_run_once | default(False) }}"
+  cron:
+    name: "{{ item.provision_params.command }}"
+    job: "{{ item.provision_params.command }}"
+    state: present
+    user: "{{ deployment_user }}"
+    minute: "{{ cron_frequency.minute }}"
+    hour: "{{ cron_frequency.hour }}"
+    day: "{{ cron_frequency.day }}"
+    month: "{{ cron_frequency.month }}"
+    weekday: "{{ cron_frequency.weekday }}"
+  register: cron_output
+
+- name: Storing the crontab created
+  set_fact:
+    provision_results: "{{ cron_output.jobs | default([]) }}"
+  when: cron_output is success

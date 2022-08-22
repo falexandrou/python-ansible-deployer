@@ -1,0 +1,41 @@
+---
+- name: Checking if the local repository exists
+  stat:
+    path: "{{ app_dir_repository }}/.git"
+  register: repocheck
+
+- name: Cloning the remote git repo
+  shell: "git clone --recurse-submodules -j5 --no-single-branch --branch {{ branch }} --shallow-submodules {{ repository }} {{ app_dir_repository }}"
+  when: not repocheck.stat.exists
+  environment:
+    GIT_SSH_COMMAND: "{{ git_ssh_command }}"
+  register: git_ssh_command_output
+  changed_when: git_ssh_command_output.rc == 0
+  tags:
+    - skip_ansible_lint
+
+- name: Updating the current repository
+  shell: >-
+    git fetch --prune origin && \
+    git checkout origin/{{ branch }} -B {{ branch }} && \
+    git reset --hard {{ reference }} && \
+    git clean -f -d
+  args:
+    chdir: "{{ app_dir_repository }}"
+  environment:
+    GIT_SSH_COMMAND: "{{ git_ssh_command }}"
+  register: reposync
+  changed_when: reposync.rc == 0
+  tags:
+    - skip_ansible_lint
+
+- name: Syncing the repository with the current release
+  command: >-
+    rsync -a {{ exclusions }} {{ app_dir_repository }}/ {{ release_path }}/
+  when: reposync is success
+  vars:
+    exclusions: "{{ excluded_from_repo | as_cli_option('--exclude', '=') }}"
+  register: rsync_cmd
+  changed_when: rsync_cmd.rc == 0
+  tags:
+    - skip_ansible_lint

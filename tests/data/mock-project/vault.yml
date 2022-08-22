@@ -1,0 +1,6 @@
+---
+# TODO: use encryption for this file
+mysql_username: db_user
+mysql_password: db_password
+root_mysql_username: root_db_user
+root_mysql_password: root_db_password

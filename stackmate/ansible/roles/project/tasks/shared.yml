@@ -1,0 +1,36 @@
+---
+- name: Copying the application's shared files to the release directory
+  copy:
+    src: "{{ app_dir_configs }}/{{ cfgfile }}"
+    dest: "{{ release_path }}/{{ cfgfile }}"
+    remote_src: yes
+    force: yes
+    mode: preserve
+  loop: "{{ appconfigs | default([]) }}"
+  loop_control:
+    loop_var: cfgfile
+
+- name: Making sure the shared directories exist
+  file:
+    path: "{{ app_dir_shared }}/{{ directory }}"
+    state: directory
+    recurse: yes
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+  when: linked_directories.get(framework)
+  loop: "{{ linked_directories[framework] }}"
+  loop_control:
+    loop_var: directory
+
+- name: Linking the application's shared directories
+  file:
+    src: "{{ app_dir_shared }}/{{ directory }}"
+    dest: "{{ release_path }}/{{ directory }}"
+    state: link
+    force: yes
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+  when: linked_directories.get(framework)
+  loop: "{{ linked_directories[framework] }}"
+  loop_control:
+    loop_var: directory

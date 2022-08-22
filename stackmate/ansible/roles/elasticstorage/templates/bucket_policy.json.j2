@@ -1,0 +1,25 @@
+{
+  "Version": "2012-10-17",
+  "Id": "S3Policy-{{ entry.provision_params.name }}",
+  "Statement": [{
+      "Sid": "AllowAccessToIAM",
+      "Effect": "Allow",
+      "Principal": { "AWS": "{{ iam_user.result.Arn }}" },
+      "Action": ["s3:*"],
+      "Resource": ["arn:aws:s3:::{{ resource_name }}/*"]
+    }{%- if entry | is_cdn_enabled and origin_access_identity -%}, {
+      "Sid": "AllowAccessToCloudfront",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity {{ origin_access_identity.cloud_front_origin_access_identity.id }}",
+      },
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::{{ resource_name }}/*"]
+    }{%- endif -%}{%- if 'public' in entry.provision_params and entry.provision_params.public -%}, {
+      "Sid": "AllowPublicReadAccess",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::{{ resource_name }}/*"]
+    }{%- endif -%}]
+}

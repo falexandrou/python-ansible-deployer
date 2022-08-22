@@ -1,0 +1,18 @@
+---
+- name: Terminating SSL certificates that are no longer needed
+  delegate_to: localhost
+  stackmate_aws_acm:
+    state: absent
+    domain: "{{ item.provision_params.domains | first }}"
+    alternative_names: "{% if item.provision_params.domains | length > 1 %}{{ item.provision_params.domains[1:] }}{% else %}[]{% endif %}"
+    region: "{{ item.provision_params.region if not item.provision_params.get('is_cdn_certificate', False) else 'us-east-1' }}"
+    cdn_certificate: "{{ item.provision_params.get('is_cdn_certificate', False) }}"
+    hosted_zone_id: "{{ hosted_zone_id }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: terminated_ssl_certificates
+
+- name: Storing termination results
+  set_fact:
+    terminations_results: "{{ terminations_results | default([]) + [terminated_ssl_certificates] }}"

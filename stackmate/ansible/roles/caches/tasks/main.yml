@@ -1,0 +1,39 @@
+---
+- name: Setting facts to be populated with provisions and terminations
+  set_fact:
+    cache_provision_items: "{{ provisions | default([]) + modifications | default([]) }}"
+    provision_results: []
+    termination_results: []
+
+- name: Provisioning Elasticache services
+  block:
+    - name: Creating the resources required for the Elasticache services
+      import_tasks: aws-elasticache/before-provision.yml
+
+    - name: Provisioning Elasticache Service
+      include_tasks: aws-elasticache/provisions.yml
+      loop: "{{ provisions | default([]) + modifications | default([]) }}"
+
+    - name: Importing variables according to the distribution
+      include_vars: "{{ ansible_distribution | lower }}.yml"
+      when: groups is defined and inventory_hostname in groups.get('provisionables', {})
+
+    - name: Terminating redundant Elasticache Services
+      include_tasks: aws-elasticache/terminations.yml
+      loop: "{{ terminations | default([]) }}"
+  when: provider == 'aws'
+
+# TODO
+# - name: Installing Cache servers on your instances
+#   import_tasks: servers.yml
+#   when: provider is None
+
+- name: Installing cache client libraries on your instances
+  include_tasks: clients.yml
+  loop: "{{ provisions | default([]) + modifications | default([]) }}"
+  when: flavor == 'instances'
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_caches_state ] }}"
+  when: provider == 'aws' and store_state

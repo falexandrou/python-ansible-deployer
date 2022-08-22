@@ -1,0 +1,27 @@
+---
+- name: Choosing the template to render
+  set_fact:
+    tpldetails: "../templates/slack/{{ operation }}/details/{{ deployment_status | default('success') }}.j2"
+    tplmessage: "../templates/slack/{{ operation }}/message/{{ deployment_status | default('success') }}.j2"
+
+- name: Notifying the team about the deployment via Slack
+  delegate_to: localhost
+  slack:
+    token: "{{ providers.slack.secret }}"
+    channel: "#{{ channel }}"
+    username: Stackmate
+    msg: "{{ lookup('template', tplmessage) | trim }}"
+    attachments:
+      - color: "{{ colors | random }}"
+        text: "{{ lookup('template', tpldetails) }}"
+        title_link: "{{ operation_url }}"
+  loop: "{{ notification.targets }}"
+  loop_control:
+    loop_var: channel
+  register: slack_notifications
+
+- name: Setting the facts for the triggered notifications
+  set_fact:
+    notifications_output:
+      slack: "{{ notifications_output.slack | default([]) + slack_notifications.results }}"
+      email: "{{ notifications_output.email | default([]) }}"

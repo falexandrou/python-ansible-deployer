@@ -1,0 +1,77 @@
+---
+- name: Terminating DNS records created for the website buckets
+  delegate_to: localhost
+  route53:
+    state: absent
+    hosted_zone_id: "{{ hosted_zone_id }}"
+    alias: yes
+    # taken from https://github.com/blueimp/shell-scripts/blob/master/bin/aws-website-redirect.sh#L30
+    alias_hosted_zone_id: "{{ s3_hosted_zone_ids[entry.provision_params.region] }}"
+    type: A
+    record: "{{ rec.record }}"
+    value: "{{ rec.value }}"
+    ttl: "{{ dns_records_ttl }}"
+    wait: yes
+    overwrite: yes
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  loop: "{{ entry | s3_dns_records }}"
+  loop_control:
+    loop_var: rec
+  register: bucket_dns_records
+
+- name: Terminating the Cloudfront distribution
+  include_role:
+    name: cdn
+  when: entry | is_cdn_enabled
+  vars:
+    provisions: []
+    modifications: []
+    terminations: "{{ entry | get_cdn_provision_params }}"
+
+- name: Removing the AWS S3 bucket
+  delegate_to: localhost
+  s3_bucket:
+    state: absent
+    name: "{{ entry | s3_bucket_name }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    force: yes
+  when: not (entry | is_website)
+  register: bucket_terminated
+
+- name: Removing the AWS S3 website
+  delegate_to: localhost
+  s3_bucket:
+    state: absent
+    name: "{{ bucket.domain }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    force: yes
+  loop: "{{ entry | s3_website_buckets | list }}"
+  when: entry | is_website
+  register: bucket_terminated
+  loop_control:
+    loop_var: bucket
+
+- name: Removing the Cloudfront origin access identity (if possible)
+  delegate_to: localhost
+  cloudfront_origin_access_identity:
+    caller_reference: "{{ entry.provision_params.name }}-oai"
+    region: "{{ region }}"
+    state: absent
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  ignore_errors: yes
+  when: entry | is_cdn_enabled
+
+- name: Storing the created resources to the list
+  set_fact:
+    terminated_buckets: "{{ terminated_buckets | default([]) + [bucket_terminated] }}"
+    elasticstorage_terminated_dns_records: "{{ elasticstorage_terminated_dns_records | default([]) + bucket_dns_records.results }}"

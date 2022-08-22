@@ -1,0 +1,64 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: no
+  roles:
+    - role: instances
+
+  post_tasks:
+    - name: Terminating created resources
+      include_tasks: ../../tasks/aws-ec2/terminations.yml
+      loop: "{{ provisions }}"
+      loop_control:
+        loop_var: instance
+        index_var: idx
+      vars:
+        instance_ids: "{{ provision_results | default([]) | map(attribute='instance_id') | list }}"
+
+    - name: Removing resources that are related to the instances
+      include_tasks: ../../tasks/aws-ec2/after-termination.yml
+
+    - name: Storing output to a json file
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      delegate_to: localhost
+
+  vars:
+    # required variables
+    keypair_name: molecule-test
+    vpc_id: vpc-09ebb623125812dd5
+    main_vpc_subnet_id: subnet-02eacc03ad59e4568
+    stage: molecule-test
+    provider: aws
+    flavor: instances
+    region: eu-central-1
+    public_key: "{{ lookup('file', '../../../../../../tests/ssh-keys/stackmate-sample-key.pub') }}"
+    # via the provision generator
+    provisions:
+      - id: service-application-application-server
+        group: application
+        provision_params:
+          configfiles: []
+          kind: application
+          name: application-server-1
+          port: 80
+          provider: aws
+          size: t2.nano
+          storage: 16
+          region: eu-central-1
+      - id: service-application-application-server
+        group: application
+        provision_params:
+          configfiles: []
+          kind: application
+          name: application-server-2
+          port: 80
+          provider: aws
+          size: t2.nano
+          storage: 16
+          region: eu-central-1
+    modifications: []
+    terminations: []
+    unchanged: []

@@ -1,0 +1,37 @@
+---
+- name: Setting up the variables to append the created resources to
+  set_fact:
+    workertemplatesdir: ../templates
+    worker_items: "{{ provisions | default([]) + modifications | default([]) }}"
+    provisioned_items: []
+
+- name: Provisioning the app server's systemd files
+  block:
+    - name: "Provisioning {{ entry.provision_params.kind }}"
+      include_tasks: worker.yml
+      vars:
+        action: install
+      loop: "{{ worker_items }}"
+      loop_control:
+        loop_var: entry
+      when: inventory_hostname in groups.get(entry.group, {})
+
+    - name: "Terminating {{ entry.provision_params.kind }}"
+      include_tasks: worker.yml
+      vars:
+        action: remove
+      loop: "{{ terminations }}"
+      loop_control:
+        loop_var: entry
+      when: inventory_hostname in groups.get(entry.group, {})
+  when: flavor == 'instances'
+
+- name: Reloading systemd to enable provisioning results
+  become: yes
+  systemd:
+    daemon_reload: yes
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_workers_state ] }}"
+  when: store_state

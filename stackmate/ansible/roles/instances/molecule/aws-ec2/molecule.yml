@@ -1,0 +1,36 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: delegated
+lint:
+  name: yamllint
+platforms:
+  - name: instance-instances-role
+    image: stackmate/stackmate-base:0.2
+    command: ${MOLECULE_DOCKER_COMMAND:-"sleep infinity"}
+    pre_build_image: true
+    groups:
+      - nonexistentgroup
+provisioner:
+  name: ansible
+  lint:
+    name: ansible-lint
+  inventory:
+    host_vars:
+      all:
+        ansible_user: stackmate
+verifier:
+  name: testinfra
+  lint:
+    name: flake8
+scenario:
+  name: aws-ec2
+  converge_sequence:
+    - converge
+  destroy_sequence:
+    - cleanup
+  test_sequence:
+    - lint
+    - syntax
+    - converge

@@ -1,0 +1,43 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: no
+
+  roles:
+    - role: notifications
+
+  post_tasks:
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    deployment_status: failure
+    operation_url: https://stackmate.io/operations/12345
+    operation: rollback
+    stage: production
+    scm: github
+    branch: master
+    repository: git@github.com:stackmate-io/stackmate-cli.git
+
+    notifications:
+      - type: email
+        targets:
+          - fotis@stackmate.io
+
+      - type: slack
+        targets:
+          - deployments
+
+    providers:
+      email:
+        host: smtp.sendgrid.net
+        port: 587
+        access_key: apikey
+        secret: "{{ lookup('env', 'STACKMATE_SENDGRID_TOKEN') }}"
+      slack:
+        secret: "{{ lookup('env', 'STACKMATE_SLACK_TOKEN') }}"

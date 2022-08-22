@@ -1,0 +1,78 @@
+---
+- name: Run the molecule test
+  gather_facts: no
+  connection: local
+  hosts: localhost
+
+  roles:
+    - role: prerequisites
+
+  post_tasks:
+    - name: Destroying the gateway route table
+      ec2_vpc_route_table:
+        state: absent
+        vpc_id: "{{ hostvars['localhost']['vpc_id'] }}"
+        region: "{{ region }}"
+        lookup: id
+        route_table_id: "{{ hostvars['localhost']['route_table_id'] }}"
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+
+    - name: Destroying the internet gateway
+      ec2_vpc_igw:
+        state: absent
+        vpc_id: "{{ hostvars['localhost']['vpc_id'] }}"
+        region: "{{ region }}"
+        validate_certs: false
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+
+    - name: Destroying the VPC subnets
+      ec2_vpc_subnet:
+        state: absent
+        vpc_id: "{{ hostvars['localhost']['vpc_id'] }}"
+        cidr: "{{ item }}"
+        region: "{{ region }}"
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+        purge_tags: true
+        wait: true
+      loop:
+        - "{{ main_subnet_cidr }}"
+        - "{{ alt_subnet_cidr }}"
+
+    - name: Destroy test VPC
+      ec2_vpc_net:
+        state: absent
+        cidr_block: "{{ hostvars['localhost']['vpc_cidr'] }}"
+        name: "{{ vpc_name }}"
+        region: "{{ region }}"
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+        purge_cidrs: yes
+
+    - name: Destroying the Route53 zone
+      delegate_to: localhost
+      route53_zone:
+        zone: "{{ domain }}"
+        state: absent
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+
+    - name: Storing output to a json file
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      delegate_to: localhost
+
+  vars:
+    provider: aws
+    region: eu-central-1
+    scm: github
+    domain: ezploy-test.eu

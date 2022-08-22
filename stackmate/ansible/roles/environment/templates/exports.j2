@@ -1,0 +1,5 @@
+# Reads and exports all variables found in {{ env_variables_file }}
+# The variables in {{ env_variables_file }} are managed by Stackmate.io,
+# and they get overwritten upon every deployment, so please use Stackmate.io
+# in order to add or remove ENV variables
+export $(cat {{ env_variables_file }} | xargs)

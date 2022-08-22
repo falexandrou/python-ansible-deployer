@@ -1,0 +1,7 @@
+---
+systemd_user: systemd
+systemd_group: systemd
+kill_mode: process
+stdout: syslog
+profile_script: ~/.profile
+system_profile_script: /etc/profile

@@ -1,0 +1,55 @@
+---
+- name: "Creating a {{ item.provision_params.kind }} cache parameter group"
+  delegate_to: localhost
+  elasticache_parameter_group:
+    state: present
+    region: "{{ item.provision_params.region | default(region) }}"
+    name: "{{ item | elasticache_param_group_name }}"
+    description: "Stackmate parameter group for {{ item.provision_params.kind }} {{ item.provision_params.version }}"
+    group_family: "{{ item | elasticache_param_group_family }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: cache_param_group
+
+- name: "Creating a {{ item.provision_params.kind }} cache subnet group"
+  delegate_to: localhost
+  elasticache_subnet_group:
+    state: present
+    name: "{{ elasticache_subnet_group_name }}-{{ item.provision_params.name }}"
+    description: Stackmate Elasticache subnet group
+    subnets:
+      - "{{ main_vpc_subnet_id }}"
+      - "{{ alternative_vpc_subnet_id }}"
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: cache_subnet_group
+
+- name: Deploying & modifying Elasticache instances (this will take a while)
+  delegate_to: localhost
+  elasticache:
+    name: "{{ item.provision_params.name }}"
+    state: present
+    engine: "{{ item.provision_params.kind }}"
+    cache_engine_version: "{{ item.provision_params.version }}"
+    cache_port: "{{ item.provision_params.port }}"
+    node_type: "{{ item.provision_params.size }}"
+    num_nodes: "{{ item.provision_params.nodes | default(1) }}"
+    cache_subnet_group: "{{ elasticache_subnet_group_name }}-{{ item.provision_params.name }}"
+    hard_modify: yes
+    security_group_ids:
+      - "{{ default_sg.group_id }}"
+      - "{{ stackmate_sg.group_id }}"
+      - "{{ caches_sg.group_id }}"
+    region: "{{ item.provision_params.region | default(region) }}"
+    wait: yes
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: deployed_output
+
+- name: Setting the facts for the recently deployed instances
+  set_fact:
+    provision_results: "{{ provision_results + [deployed_output.elasticache.data] }}"

@@ -1,0 +1,34 @@
+---
+deployment_user: stackmate
+ssh_port: 22
+flavor: instances
+apt_lock_retries: 0
+apt_lock_delay: 10
+apt_cache_timeout: 7200
+remote_tmp: /tmp
+# configurable variables
+distro: ubuntu
+timezone: Etc/UTC
+apt_cache_valid_time: 86400
+
+# package specific variables
+sshd_config: /etc/ssh/sshd_config
+store_state: yes
+
+# whether to add swap to the instances
+enable_swap: yes
+
+# swap file
+swapfile_size: "{{ ((ansible_memtotal_mb | int * 2)
+                    if (ansible_memtotal_mb | int <= 2048)
+                    else '512') }}"
+
+swapfile_fallocate: False
+swapfile_path: "/swapfile"
+
+swapfile_swappiness: 60
+swapfile_vfs_cache_pressure: 100
+
+swapfile_sysctl:
+  "vm.swappiness": "{{ swapfile_swappiness }}"
+  "vm.vfs_cache_pressure": "{{ swapfile_vfs_cache_pressure }}"

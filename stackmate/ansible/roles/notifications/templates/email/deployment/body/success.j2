@@ -1,0 +1,36 @@
+<p>
+    Good job! The commit
+    <a href="{{ commit.reference | commit_url(repository=repository, scm=scm) }}">{{ commit.reference}}</a>
+    is now live!
+</p>
+
+<p>
+    All systems provisioned correctly and the application's source is now at
+    <a href="{{ commit.reference | commit_url(repository=repository, scm=scm) }}">
+        {{ commit.reference}}
+    </a>
+    authored by
+    <a href="{{ commit.author | user_url(scm=scm) }}">
+        {{ commit.author }}
+    </a>.
+    <br />
+    In case you notice anything unusual regarding the systems provisioned by Stackmate,
+    please contact us at {{ support_email }}
+</p>
+
+<p>
+    You can view the full output of the deployment on
+    <a href="{{ operation_url }}">Stackmate.io</a>
+</p>
+
+<p>
+    Keep Shipping,
+    The Stackmate.io team
+</p>
+
+<p>
+    <small>
+        This is an automated transactional email sent by Stackmate.io.
+        In case you neet to reach out to us, please do so at {{ support_email }}
+    </small>
+</p>

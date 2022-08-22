@@ -1,0 +1,55 @@
+---
+- name: Deploying the Cloudfront distribution
+  delegate_to: localhost
+  cloudfront_distribution:
+    state: present
+    caller_reference: "{{ item.provision_params.name }}"
+    aliases: "{{ item | cloudfront_aliases(ssl_certificates.certificates) }}"
+    price_class: "{{ cloudfront_price_class }}"
+    comment: Deployed via Stackmate
+    region: "{{ region }}"
+    default_cache_behavior: "{{ item | cloudfront_default_cache_behavior }}"
+    default_root_object: "{{ item.provision_params.get('root_object') | default(omit) }}"
+    cache_behaviors: "{{ item | cloudfront_cache_behaviors }}"
+    custom_error_responses: []
+    enabled: yes
+    purge_tags: yes
+    purge_aliases: yes
+    purge_origins: yes
+    purge_cache_behaviors: yes
+    purge_custom_error_responses: yes
+    origins: "{{ item | cloudfront_origins }}"
+    viewer_certificate: "{{ item | cloudfront_distribution_certificate(ssl_certificates.certificates) }}"
+    tags:
+      Name: "{{ item.provision_params.name }}"
+      Environment: "{{ stage }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: cloudfront_distribution
+
+- name: Adding the DNS records for the CDN
+  delegate_to: localhost
+  route53:
+    state: present
+    hosted_zone_id: "{{ hosted_zone_id }}"
+    alias: yes
+    alias_hosted_zone_id: "{{ route53_alias_hosted_zone_id }}"
+    type: A
+    record: "{{ rec.record }}"
+    value: "{{ rec.value }}"
+    ttl: "{{ dns_records_ttl }}"
+    wait: yes
+    overwrite: yes
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  loop: "{{ cloudfront_distribution | cloudfront_dns_records }}"
+  loop_control:
+    loop_var: rec
+  register: created_cnames
+
+- name: Storing created resources
+  set_fact:
+    created_dns_records: "{{ created_dns_records | default([]) + created_cnames.results }}"
+    provision_results: "{{ provision_results | default([]) + [cloudfront_distribution] }}"

@@ -1,0 +1,112 @@
+---
+- name: Converge
+  hosts: localhost
+  gather_facts: no
+
+  roles:
+    - role: elasticstorage
+
+  post_tasks:
+    - name: Terminating created resources
+      include_tasks: ../../tasks/aws-s3/terminations.yml
+      loop: "{{ provisions }}"
+      loop_control:
+        loop_var: entry
+
+    - name: Removing the IAM policy
+      delegate_to: localhost
+      iam_policy:
+        iam_type: user
+        iam_name: "{{ storage_username | get_storage_username(domain) }}"
+        state: absent
+        policy_name: "{{ domain | iam_policy_name }}"
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+
+    # Ansible IAM and AWS deletion are fucked up.
+    # see https://stackoverflow.com/a/51316619/131384
+    - name: Removing the storage user
+      delegate_to: localhost
+      iam:
+        iam_type: user
+        state: absent
+        access_key_state: remove
+        key_count: 0
+        name: "{{ storage_username | get_storage_username(domain) }}"
+        region: "{{ region }}"
+        aws_access_key: "{{ providers.aws.access_key }}"
+        aws_secret_key: "{{ providers.aws.secret }}"
+        security_token: "{{ providers.aws.token }}"
+
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    provider: aws
+    region: eu-central-1
+    hosted_zone_id: Z29S2FHXE4IGW6
+    domain: ezploy.eu
+    providers:
+      aws:
+        access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+        secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+        token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+    # important if we need the buckets to be removed
+    termination_confirmed: true
+    provisions:
+      # private bucket
+      - id: service-elasticstorage-abc123
+        provision_params:
+          region: eu-central-1
+          name: stackmate-someprivatebucket
+
+      # public bucket
+      - id: service-elasticstorage-abc234
+        provision_params:
+          region: eu-central-1
+          name: stackmate-onepublicbucket
+          public: true
+
+      # private bucket with cdn (default cloudfront url)
+      - id: service-elasticstorage-abc345
+        provision_params:
+          region: eu-central-1
+          name: stackmate-someprivatebucket-with-cdn
+          cdn: true
+
+      # private bucket with custom url
+      - id: service-elasticstorage-abc456
+        provision_params:
+          region: eu-central-1
+          name: stackmate-someprivatebucket-with-custom-cdn-alias
+          cdn: true
+          domain: test.ezploy.eu # make sure we issued a certificate for this domain
+
+      # private bucket with custom url
+      - id: service-elasticstorage-abc567
+        provision_params:
+          region: eu-central-1
+          name: website-ezploy-cdn
+          website: true
+          directory_index: index.html
+          error_page: errors/error.html
+          domain: cdn.ezploy.eu # make sure we issued a certificate for this domain
+
+      # private bucket with custom TLD url
+      - id: service-elasticstorage-abc678
+        provision_params:
+          region: eu-central-1
+          name: website-ezploy-eu
+          website: true
+          directory_index: index.html
+          error_page: errors/error.html
+          domain: ezploy.eu # make sure we issued a certificate for this domain
+
+    modifications: []
+    terminations: []

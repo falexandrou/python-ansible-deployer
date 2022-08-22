@@ -1,0 +1,14 @@
+---
+version: 1.18
+nginx_conf_path: /etc/nginx/nginx.conf
+nginx_conf_dir: /etc/nginx/conf.d
+apt_lock_retries: 30
+apt_lock_delay: 10
+apt_cache_timeout: 7200
+apt_keys:
+  ubuntu:
+    # Instructions on how to get this key
+    # https://www.nginx.com/resources/wiki/start/topics/tutorials/install/
+    bionic: 00A6F0A3C300EE8C
+    focal: ABF5BD827BD9BF62
+store_state: yes

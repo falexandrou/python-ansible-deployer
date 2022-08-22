@@ -1,0 +1,37 @@
+---
+- name: Making sure the nginx directories exist
+  become: yes
+  file:
+    path: "{{ directory }}"
+    state: directory
+    recurse: yes
+  loop:
+    - /etc/nginx/sites-available
+    - /etc/nginx/sites-enabled
+  loop_control:
+    loop_var: directory
+
+# the reason for the following fact is that we're using pre_tasks
+# to populate a service to be terminated in the molecule tests
+# if we were to use nginx-website.j2 directly, we'd get an error plus,
+# if we were to use a relative path in the statement directly, we'd get a lint error
+- name: Setting the fact for the nginx template
+  set_fact:
+    nginxtemplate: ../templates/nginx-website.j2
+
+- name: Provisioning the nginx available website file
+  become: yes
+  template:
+    src: "{{ nginxtemplate }}"
+    dest: "/etc/nginx/sites-available/{{ domain }}.conf"
+  when: flavor == 'instances' and inventory_hostname in groups.get('application', {})
+  register: nginxfile
+
+- name: Linking the nginx website into the sites-enabled folder
+  become: yes
+  file:
+    src: "/etc/nginx/sites-available/{{ domain }}.conf"
+    path: "/etc/nginx/sites-enabled/{{ domain }}.conf"
+    force: yes
+    state: link
+  when: flavor == 'instances' and inventory_hostname in groups.get('application', {}) and nginxfile is success

@@ -1,0 +1,56 @@
+---
+- name: Setting the path for the user's my.cnf
+  set_fact:
+    mycnf_location: "/home/{{ deployment_user }}/.my.cnf"
+    creds: "{{ dbentry.provision_params.get('credentials', {}) }}"
+    mysql_plain_user_privs: "{{ mysql_user_grants | join(',') }}"
+
+- name: Creating the user's my.cnf file
+  become: yes
+  copy:
+    content: "{{ lookup('template', 'my.cnf.j2') }}"
+    dest: "{{ mycnf_location }}"
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_user }}"
+    mode: '0600'
+  vars:
+    mycnf_host: "{{ deployed_output.endpoint.address }}"
+    mycnf_login_host: "{{ deployed_output.endpoint.address }}"
+    mycnf_user: "{{ dbentry.provision_params.root_credentials.username }}"
+    mycnf_password: "{{ dbentry.provision_params.root_credentials.password }}"
+    mycnf_port: "{{ dbentry.provision_params.port | default(3306) }}"
+
+- name: Creating the databases
+  run_once: yes
+  mysql_db:
+    name: "{{ database }}"
+    state: present
+    encoding: utf8mb4
+    collation: utf8mb4_general_ci
+    config_file: ''
+    login_host: "{{ deployed_output.endpoint.address }}"
+    login_port: "{{ dbentry.provision_params.port }}"
+    login_user: "{{ dbentry.provision_params.root_credentials.username }}"
+    login_password: "{{ dbentry.provision_params.root_credentials.password }}"
+    login_unix_socket: ''
+  register: mysql_database_created
+  loop: "{{ dbentry.provision_params.get('databases') | default([]) }}"
+  loop_control:
+    loop_var: database
+
+- name: Creating the database user
+  run_once: yes
+  mysql_user:
+    name: "{{ creds.username }}"
+    password: "{{ creds.password }}"
+    config_file: ''
+    host: '%'
+    priv: "*.*:{{ mysql_plain_user_privs }}"
+    login_host: "{{ deployed_output.endpoint.address }}"
+    login_port: "{{ dbentry.provision_params.port | default(3306) }}"
+    login_user: "{{ dbentry.provision_params.root_credentials.username }}"
+    login_password: "{{ dbentry.provision_params.root_credentials.password }}"
+    login_unix_socket: ''
+    update_password: always
+  when: creds.get('username') and creds.get('password')
+  register: mysql_user_created

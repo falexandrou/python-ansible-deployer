@@ -1,0 +1,15 @@
+---
+provider: aws
+scm: github
+store_state: yes
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+  github:
+    access_key: "{{ lookup('env', 'STACKMATE_GITHUB_ID') }}"
+    secret: "{{ lookup('env', 'STACKMATE_GITHUB_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_GITHUB_TOKEN') }}"
+github_deploy_key_name: Stackmate Deploy Key
+public_key:

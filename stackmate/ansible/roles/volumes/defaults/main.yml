@@ -1,0 +1,40 @@
+---
+deployment_user: stackmate
+deployment_group: stackmate
+ssh_port: 22
+keypair_name: stackmate_keypair
+flavor: instances
+provider: aws
+# the security group that allows access to stackmate via ssh
+vpc_cidr: 10.0.0.0/16
+# variables to be defined by the deployer
+public_key:
+vpc_id:
+main_vpc_subnet_id:
+alternative_vpc_subnet_id:
+stage:
+region:
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+store_state: yes
+
+instances_security_group: application-incoming
+termination_confirmed: false
+
+# nfs packages
+nfs_packages:
+  - nfs-common
+  - autofs
+  - rpcbind
+
+# volumes role related vars
+nfs_mount_options: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2
+
+mount_options:
+  nfs: "{{ nfs_mount_options }}"
+
+apt_lock_retries: 30
+apt_lock_delay: 10

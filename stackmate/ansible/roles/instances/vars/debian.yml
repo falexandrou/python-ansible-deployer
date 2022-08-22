@@ -1,0 +1,19 @@
+---
+# essential packages to include
+essential_packages:
+  - build-essential
+  - vim
+  - htop
+  - git
+  - unzip
+  - ntp
+  - cron
+  - openssl
+
+# ntp provisioning
+ntp_daemon: ntp
+ntp_tzdata_package: tzdata
+ntp_driftfile: /var/lib/ntp/drift
+
+# sshd provisioning
+sshd_config: /etc/ssh/sshd_config

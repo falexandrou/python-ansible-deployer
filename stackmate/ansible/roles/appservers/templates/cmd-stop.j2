@@ -1,0 +1,9 @@
+{% if entry.provision_params.kind == 'gunicorn' %}
+/bin/kill -TSTP $MAINPID
+{% elif entry.provision_params.kind == 'daphne' %}
+/bin/kill -TSTP $MAINPID
+{% elif entry.provision_params.kind == 'pm2' %}
+{{executable_path.stdout}} kill
+{% elif entry.provision_params.kind == 'puma' %}
+/bin/kill -TSTP $MAINPID
+{% endif %}

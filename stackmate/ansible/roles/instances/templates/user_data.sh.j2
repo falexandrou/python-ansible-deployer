@@ -1,0 +1,23 @@
+#!/bin/bash
+sudo su
+
+# make python print utf8 in the console
+echo "LC_ALL=en_US.UTF-8" >> /etc/default/locale
+
+# Avoid "unable to resolve host" errors for sudo
+echo "127.0.0.1  $HOSTNAME" | tee -a /etc/hosts
+
+# create users and groups
+adduser --disabled-password --gecos "" {{deployment_user}}
+usermod -a -G {{deployment_user}} {{deployment_user}}
+
+# Allow the user to use sudo
+echo "{{deployment_user}}    ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers;
+
+# set up ssh
+mkdir -p /home/{{deployment_user}}/.ssh/
+echo '{{public_key}}' > /home/{{deployment_user}}/.ssh/authorized_keys
+ssh-keyscan -T 10 -t rsa github.com bitbucket.org gitlab.com > /home/{{ deployment_user }}/.ssh/known_hosts
+
+# chown to the user's account
+chown -R {{deployment_user}}:{{deployment_user}} /home/{{deployment_user}}

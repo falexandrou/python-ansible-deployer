@@ -1,0 +1,19 @@
+---
+- name: Terminating unwanted RDS instances
+  delegate_to: localhost
+  rds_instance:
+    state: absent
+    db_instance_identifier: "{{ item.provision_params.name }}"
+    region: "{{ item.provision_params.region | default(region) }}"
+    copy_tags_to_snapshot: yes
+    final_snapshot_identifier: "final-{{ item.provision_params.name }}-{{ ansible_date_time.iso8601_basic_short }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    wait: no
+  loop: "{{ terminations | default([]) }}"
+  register: terminated_output
+
+- name: Gathering facts about the terminated instances
+  set_fact:
+    terminated_instances: "{{ terminated_output.results }}}"

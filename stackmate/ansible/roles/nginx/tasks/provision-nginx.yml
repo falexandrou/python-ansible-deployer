@@ -1,0 +1,27 @@
+---
+- name: Setting the nginx configuration options
+  set_fact:
+    nginx_worker_processes: "{% if ansible_processor_vcpus is defined %}{{ ansible_processor_vcpus }}{% else %}16{% endif %}"
+    version: "{{ prov.provision_params.version | default(version) | string }}"
+
+- import_tasks: ubuntu.yml
+  become: yes
+  when: ansible_distribution.lower() == 'ubuntu'
+
+- name: Copying the optimized configuration
+  become: yes
+  copy:
+    dest: "{{ cfgfile.value }}"
+    content: "{{ lookup('template', cfgfile.key) }}"
+  with_dict:
+    "stackmate.nginx.conf.j2": "{{ nginx_conf_dir }}/stackmate.conf"
+    "nginx.conf.j2": "{{ nginx_conf_path }}"
+  loop_control:
+    loop_var: cfgfile
+
+- name: Making sure the NGINX service is up and running
+  become: yes
+  service:
+    name: nginx
+    state: restarted
+    enabled: yes

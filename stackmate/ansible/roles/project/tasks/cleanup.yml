@@ -1,0 +1,20 @@
+---
+- name: Get all the releases available
+  shell: 'echo `find {{ app_dir_releases }} -type d -maxdepth 1 -mindepth 1 | sort`'
+  register: current_releases
+  changed_when: no
+  tags:
+    - skip_ansible_lint
+
+- name: Cleaning up old releases
+  file:
+    path: "{{ obsolete_directory }}"
+    state: absent
+  loop: "{{ current_releases.stdout | splitstring(' ') | get_obsolete_releases(keep=keep_releases) }}"
+  loop_control:
+    loop_var: obsolete_directory
+  register: removed_paths
+
+- name: Writing down the removed releases
+  set_fact:
+    removed_releases: "{{ removed_paths.results | map(attribute='diff') | map(attribute='after') | map(attribute='path') | list }}"

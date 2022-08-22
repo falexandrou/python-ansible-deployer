@@ -1,0 +1,91 @@
+---
+- name: "Setting the facts for {{ entry.provision_params.kind }}"
+  set_fact:
+    package_state: "{{ 'present' if action == 'install' else 'absent' }}"
+    servicecfg: "{{ configurations[entry.provision_params.kind] | default({}) }}"
+    # should be overwritten by the absolute path value
+    bundler_executable: ''
+    celery_executable: ''
+    python_executable: ''
+    startcmd_template: "{{ workertemplatesdir + '/cmd-start.j2' }}"
+    stopcmd_template: "{{ workertemplatesdir + '/cmd-stop.j2' }}"
+    reloadcmd_template: "{{ workertemplatesdir + '/cmd-reload.j2' }}"
+
+- name: Setting the facts for PATH
+  shell: ". {{ system_profile_script }} && . {{ profile_script }} && echo $PATH"
+  args:
+    executable: /bin/bash
+  changed_when: path_out.rc == 0
+  register: path_out
+  tags:
+    - skip_ansible_lint
+
+- name: Determining the absolute path for celery
+  shell: "which {{ entry.provision_params.kind }} || echo '{{ entry.provision_params.kind }}'"
+  args:
+    executable: /bin/bash
+  when: entry.provision_params.kind in ['celery', 'celerybeat']
+  changed_when: celery_executable.rc == 0
+  register: celery_executable
+  environment:
+    PATH: "{{ path_out.stdout }}"
+  tags:
+    - skip_ansible_lint
+
+- name: Determining the absolute path for bundler
+  shell: "which bundle || echo 'bundle'"
+  args:
+    executable: /bin/bash
+  changed_when: bundle_executabe_path.rc == 0
+  register: bundle_executabe_path
+  when: entry.provision_params.kind in ['sidekiq', 'resque']
+  environment:
+    PATH: "{{ path_out.stdout }}"
+  tags:
+    - skip_ansible_lint
+
+- name: Determining the absolute path for the python executable
+  shell: "which python || echo 'python'"
+  args:
+    executable: /bin/bash
+  changed_when: python_executable.rc == 0
+  register: python_executable
+  when: entry.provision_params.kind in ['runworker']
+  environment:
+    PATH: "{{ path_out.stdout }}"
+  tags:
+    - skip_ansible_lint
+
+- name: "Setting the configuration entry"
+  set_fact:
+    entry_config: "{{ entry.provision_params.get('config') | ternary(entry.provision_params.get('config'), {}) }}"
+    default_startcmd: "{{ lookup('template', startcmd_template) }}"
+    default_stopcmd: "{{ lookup('template', stopcmd_template) }}"
+    default_reloadcmd: "{{ lookup('template', reloadcmd_template) }}"
+
+- name: Setting the provision item entry
+  set_fact:
+    itementry:
+      provision_params:
+        id: "{{ entry.id }}"
+        kind: "{{ entry.provision_params.kind }}"
+        servicename: "{{ entry.provision_params.get('servicename') | ternary(entry.provision_params.servicename, entry.provision_params.kind) }}"
+        description: "{{ entry.provision_params.description | default(servicecfg.get('description')) | default('Worker service') }}"
+        target: yes
+        socket: yes
+        enabled: "{{ entry.provision_params.get('enabled') | default(false) }}" # the service will be enabled via the application role
+        config: "{{ servicecfg | combine(entry_config, recursive=True) }}"
+        startcmd: "{{ entry.provision_params.get('startcmd') | ternary(entry.provision_params.startcmd, default_startcmd) }}"
+        stopcmd: "{{ entry.provision_params.get('stopcmd') | ternary(entry.provision_params.stopcmd, default_stopcmd) }}"
+        reloadcmd: "{{ entry.provision_params.get('reloadcmd') | ternary(entry.provision_params.reloadcmd, default_reloadcmd) }}"
+      group: "{{ entry.group }}"
+
+- name: "Provisioning the systemd service configuration for {{ entry.provision_params.kind }}"
+  include_role:
+    name: systemd
+  vars:
+    store_state: no
+    working_directory: "{{ public_release_path }}"
+    provisions: "{{ [itementry] if action == 'install' else [] }}"
+    modifications: []
+    terminations: "{{ [itementry] if not action == 'install' else [] }}"

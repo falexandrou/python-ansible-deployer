@@ -1,0 +1,120 @@
+---
+- name: Setting the fact for the target group
+  set_fact:
+    target_group_name: "{{ item.provision_params.target_group }}-group"
+
+- name: Creating a load balancer target group
+  delegate_to: localhost
+  elb_target_group:
+    name: "{{ item | elb_target_group_name(elb_target_group_prefix) }}"
+    protocol: http
+    port: "{{ item.provision_params.target_port | default(80) }}"
+    vpc_id: "{{ vpc_id }}"
+    state: present
+    target_type: instance
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    health_check_interval: "10"
+    health_check_port: "80"
+    health_check_protocol: http
+    healthy_threshold_count: "10"
+    unhealthy_threshold_count: "5"
+    stickiness_enabled: no
+    deregistration_delay_timeout: "10"
+    purge_tags: yes
+    wait: no
+    tags:
+      Name: "{{ item | elb_target_group_name(elb_target_group_prefix) }}"
+      Environment: "{{ stage }}"
+      Group: "{{ item.provision_params.target_group }}"
+  register: elb_tg
+
+- name: Creating an Application load balancer
+  delegate_to: localhost
+  elb_application_lb:
+    name: "{{ item | elb_alb_name(elb_name_prefix) }}"
+    security_groups:
+      - "{{ default_sg.group_id }}"
+      - "{{ elb_sg.group_id }}"
+    subnets:
+      - "{{ main_vpc_subnet_id }}"
+      - "{{ alternative_vpc_subnet_id }}"
+    http2: yes
+    idle_timeout: 60
+    purge_listeners: yes
+    purge_rules: yes
+    purge_tags: yes
+    region: "{{ item.provision_params.region | default(region) }}"
+    scheme: internet-facing
+    state: present
+    listeners:
+      - Protocol: HTTP
+        Port: 80
+        DefaultActions:
+          - Type: forward
+            TargetGroupName: "{{ item | elb_target_group_name(elb_target_group_prefix) }}"
+
+      - Protocol: HTTPS
+        Port: 443
+        SslPolicy: ELBSecurityPolicy-2015-05
+        Certificates: "{{ item | elb_certificate_arns(ssl_certificates.certificates) }}"
+        DefaultActions:
+          - Type: forward
+            TargetGroupName: "{{ item | elb_target_group_name(elb_target_group_prefix) }}"
+    tags:
+      Name: "{{ item | elb_alb_name(elb_name_prefix) }}"
+      Environment: "{{ stage }}"
+      Group: "{{ item.provision_params.target_group }}"
+      Application: "{{ elb_long_name }}"
+    wait: yes
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: loadbalancer
+
+- name: Registering the instances with the load balancer target group
+  delegate_to: localhost
+  elb_target:
+    target_group_name: "{{ item | elb_target_group_name(elb_target_group_prefix) }}"
+    target_id: "{{ instance_id }}"
+    target_port: "{{ item.provision_params.target_port | default(80) }}"
+    state: present
+    region: "{{ item.provision_params.region | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    deregister_unused: no
+  ignore_errors: "{{ ignore_target_registration_errors or False }}"
+  loop: "{{ item.provision_params.target_instances }}"
+  loop_control:
+    loop_var: instance_id
+  register: elb_target_registrations
+
+- name: Creating the Route53 entries for the load balancer
+  delegate_to: localhost
+  route53:
+    state: present
+    type: "{{ rec.record_type }}"
+    hosted_zone_id: "{{ hosted_zone_id }}"
+    record: "{{ rec.record }}"
+    value: "{{ rec.value }}"
+    ttl: "{{ dns_records_ttl }}"
+    alias: "{{ rec.is_alias }}"
+    alias_hosted_zone_id: "{{ rec.hosted_zone_id | default(omit) }}"
+    wait: yes
+    overwrite: yes
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  loop: "{{ item | elb_alb_dns_records(loadbalancer) }}"
+  loop_control:
+    loop_var: rec
+  when: loadbalancer is success and item.provision_params.get('domain') is defined
+  register: created_alb_records
+
+- name: Storing the created resources
+  set_fact:
+    provision_results: "{{ provision_results | default([]) + [loadbalancer] }}"
+    provisioned_dns_records: "{{ provisioned_dns_records | default([]) + created_alb_records.results }}"

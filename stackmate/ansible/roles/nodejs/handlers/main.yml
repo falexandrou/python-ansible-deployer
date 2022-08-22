@@ -1,0 +1,13 @@
+---
+- name: refresh apt cache
+  become: yes
+  apt:
+    update_cache: yes
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+  when: nodesource_repository.changed
+  register: refresh_cache_out
+  until: refresh_cache_out is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock

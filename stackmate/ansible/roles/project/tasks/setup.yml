@@ -1,0 +1,18 @@
+---
+- name: Making sure the deployment directory structure exists
+  become: yes
+  file:
+    state: directory
+    path: "{{ dirpath }}"
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+    recurse: no
+  loop:
+    - "{{ deployment_path }}"
+    - "{{ app_dir_repository }}"
+    - "{{ app_dir_releases }}"
+    - "{{ app_dir_shared }}"
+    - "{{ app_dir_cache }}"
+    - "{{ app_dir_configs }}"
+  loop_control:
+    loop_var: dirpath

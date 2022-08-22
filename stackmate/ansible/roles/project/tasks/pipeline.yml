@@ -1,0 +1,69 @@
+---
+- name: "Pipeline: Building the application"
+  include_tasks: runcommand.yml
+  vars:
+    command_title: "Pipeline: {{ command }}"
+  loop: "{{ step.value }}"
+  loop_control:
+    loop_var: command
+  when: step.key in build_steps and operation == 'deployment'
+  register: build_step_output
+
+- name: "Pipeline: Seeding the database"
+  include_tasks: runcommand.yml
+  vars:
+    command_title: "Pipeline: {{ command }}"
+  loop: "{{ step.value }}"
+  loop_control:
+    loop_var: command
+  when: step.key == 'db:seed' and operation == 'deployment' and is_first_deployment
+  register: seed_step_output
+
+- name: "Pipeline: Migrating the database"
+  include_tasks: runcommand.yml
+  vars:
+    command_title: "Pipeline: {{ command }}"
+  loop: "{{ step.value }}"
+  loop_control:
+    loop_var: command
+  when: (step.key == 'db:migrate' and operation == 'deployment') or (step.key == 'db:rollback' and operation == 'rollback')
+
+- name: "Pipeline: Reloading the application’s services"
+  become: yes
+  systemd:
+    name: "{{ service.name }}"
+    enabled: yes
+    state: restarted
+  environment:
+    PATH: "{{ path_out.stdout }}"
+  register: restart_step_output
+  loop: "{{ step.value | get_services_per_group(daemons) }}"
+  loop_control:
+    loop_var: service
+  when: inventory_hostname in groups.get(service.group, {}) and step.key == 'restart'
+
+- name: "Pipeline: Restarting the application’s services"
+  become: yes
+  systemd:
+    name: "{{ service.name }}"
+    enabled: yes
+    state: reloaded
+  environment:
+    PATH: "{{ path_out.stdout }}"
+  register: post_release_step_output
+  loop: "{{ step.value | get_services_per_group(daemons) }}"
+  loop_control:
+    loop_var: service
+  when: inventory_hostname in groups.get(service.group, {}) and step.key == 'reload'
+
+- name: Storing the pipeline output
+  set_fact:
+    pipeline_output: "{{ pipeline_output + output | ternary(output.results, []) }}"
+  loop:
+    - "{{ build_step_output }}"
+    - "{{ db_step_output }}"
+    - "{{ restart_step_output }}"
+    - "{{ post_release_step_output }}"
+    - "{{ seed_step_output }}"
+  loop_control:
+    loop_var: output

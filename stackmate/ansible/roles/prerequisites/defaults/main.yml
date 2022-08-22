@@ -1,0 +1,26 @@
+---
+vpc_name: main_vpc
+subnet_name: main_subnet
+alt_subnet_name: alternative_subnet
+gateway_name: main_gateway
+route_name: main_route
+vpc_cidr: 10.0.0.0/16
+main_subnet_cidr: 10.0.1.0/24
+alt_subnet_cidr: 10.0.2.0/24
+store_state: yes
+providers:
+  rootaws:
+    access_key: "{{ lookup('env', 'STACKMATE_ROOT_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_ROOT_SECRET') }}"
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+is_on_preview_domain: no
+preview_domain_hosted_zone_id: Z0564469EQGYD5L6BOXJ
+preview_domain: myappis.live
+
+# Variables that should be defined in the play
+domain:
+region:
+stage:

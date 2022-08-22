@@ -1,0 +1,11 @@
+{% if entry.provision_params.kind == 'sidekiq' %}
+{{bundle_executabe_path.stdout}} exec sidekiq -e {{ stage | default("production") }} -C {{ entry.provision_params.get('configfile') }} -L ${SIDEKIQ_LOG_FILE}
+{% elif entry.provision_params.kind == 'resque' %}
+{{bundle_executabe_path.stdout}} exec rake {{ stage | default("production") }} resque:start_workers
+{% elif entry.provision_params.kind == 'celery' %}
+{{celery_executable.stdout}} multi start ${CELERYD_NODES} -A {{ entry.provision_params.get('appname') }} --pidfile=${CELERYD_PID_FILE} --logfile=${CELERYD_LOG_FILE} --loglevel=${CELERYD_LOG_LEVEL} ${CELERYD_OPTS}
+{% elif entry.provision_params.kind == 'celerybeat' %}
+{{celery_executable.stdout}} beat -A {{ entry.provision_params.get('appname') }} --pidfile=${CELERYBEAT_PID_FILE} --logfile=${CELERYBEAT_LOG_FILE} --loglevel=${CELERYBEAT_LOG_LEVEL}
+{% else %}
+echo 'startcmd not specified' && exit 1;
+{% endif %}

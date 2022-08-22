@@ -1,0 +1,15 @@
+---
+- name: Installing Client libraries on your instances
+  become: true
+  apt:
+    name: "{{ item | get_installables(client_packages) }}"
+    state: present
+    update_cache: yes
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+  when: ansible_distribution | lower == 'ubuntu'
+  register: client_libraries_install
+  until: client_libraries_install is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock

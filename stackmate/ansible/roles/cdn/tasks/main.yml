@@ -1,0 +1,47 @@
+---
+- name: Setting up the variables to append the created resources to
+  no_log: yes
+  set_fact:
+    provision_items: "{{ provisions | default([]) + modifications | default([]) }}"
+    provision_results: []
+    created_dns_records: []
+    termination_results: []
+    terminated_dns_records: []
+
+- name: Provisioning AWS Cloudfront distributions
+  block:
+    - name: Provisioning & modifying resources
+      block:
+      - name: Setting up the prerequisites for provisioning Cloudfront distributions
+        include_tasks: aws-cloudfront/before-provision.yml
+
+      - name: Provisioning Cloudfront distributions
+        include_tasks: aws-cloudfront/provisions.yml
+        loop: "{{ provision_items }}"
+      when: provision_items | length > 0
+
+    - name: Terminating resources
+      block:
+      - name: Setting up the prerequisites for terminating Cloudfront distributions
+        include_tasks: aws-cloudfront/before-termination.yml
+        when: terminations | length > 0
+
+      - name: Terminating unwanted Cloudfront distributions
+        include_tasks: aws-cloudfront/terminations.yml
+        loop: "{{ terminations | default([]) }}"
+      when: terminations | length > 0
+
+    - name: Setting the state for Stackmate
+      set_fact:
+        stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_cdn_state ] }}"
+      when: store_state and provider == 'aws'
+
+    - name: Setting the user action
+      set_fact:
+        pending_user_action: "{{ {'key': 'cdn_activations', 'value': created_dns_records | extract_cloudfront_domains } }}"
+
+    - name: Setting the pending actions
+      set_fact:
+        stackmate_user_action: "{{ stackmate_user_action | default([]) + [pending_user_action] }}"
+
+  when: provider == 'aws'

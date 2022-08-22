@@ -1,0 +1,14 @@
+---
+- name: Prepping up for AWS deployment
+  import_tasks: aws.yml
+  when: provider == 'aws'
+
+- name: Setting up the GitHub repository
+  import_tasks: github.yml
+  when: scm == 'github'
+  ignore_errors: yes
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_prepare_state ] }}"
+  when: provider == 'aws' and store_state

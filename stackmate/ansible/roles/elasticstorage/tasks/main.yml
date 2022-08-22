@@ -1,0 +1,37 @@
+---
+- name: Setting up the variables to append the created resources to
+  set_fact:
+    elasticstorage_provision_items: "{{ provisions | default([]) + modifications | default([]) }}"
+    elasticstorage_bucket_results: []
+    created_origin_identities: []
+    created_webites: []
+    created_dns_records: []
+    terminated_buckets: []
+    elasticstorage_terminated_dns_records: []
+    terminated_websites: []
+
+- name: Provisioning AWS S3 buckets
+  block:
+    - name: Setting up the prerequisites for provisioning S3 buckets
+      include_tasks: aws-s3/before-provision.yml
+      when: elasticstorage_provision_items | length > 0
+
+    - name: Provisioning S3 Buckets
+      include_tasks: aws-s3/provisions.yml
+      when: elasticstorage_provision_items | length > 0
+      loop: "{{ elasticstorage_provision_items }}"
+      loop_control:
+        loop_var: entry
+
+    - name: Terminating unwanted S3 buckets
+      include_tasks: aws-s3/terminations.yml
+      loop: "{{ terminations | default([]) }}"
+      when: terminations | length > 0 and termination_confirmed | bool
+      loop_control:
+        loop_var: entry
+
+    - name: Setting the state for Stackmate
+      set_fact:
+        stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_aws_elasticstorage_state ] }}"
+      when: store_state
+  when: provider == 'aws'

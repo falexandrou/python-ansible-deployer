@@ -1,0 +1,84 @@
+---
+deployment_user: stackmate
+deployment_group: stackmate
+ssh_port: 22
+keypair_name: stackmate_keypair
+flavor: instances
+provider: aws
+# the security group that allows access to stackmate via ssh
+vpc_cidr: 10.0.0.0/16
+stackmate_ssh_security_group: stackmate-ssh
+application_security_group: application-incoming
+store_state: yes
+
+# variables to be defined by the deployer
+public_key:
+vpc_id:
+main_vpc_subnet_id:
+alternative_vpc_subnet_id:
+stage:
+region:
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+
+# configurable variables
+distro: ubuntu
+storage_type: gp3
+
+amis_ubuntu_1804:
+  ap-east-1: ami-59780228
+  ap-northeast-1: ami-04a1c725d8678428c
+  ap-south-1: ami-02f8233d95e935e59
+  ap-southeast-1: ami-0bba750772355e50d
+  ca-central-1: ami-0a5d8bc3b2b741f1b
+  eu-central-1: ami-06e119a88cbc0685e
+  eu-north-1: ami-0d0d5ea079e66f69c
+  eu-west-1: ami-0c379e7083fbe41ab
+  me-south-1: ami-02ca02f52b0d29823
+  sa-east-1: ami-0619116924c87f2f8
+  us-east-1: ami-0607bfda7f358db2f
+  us-west-1: ami-077aef51e4f1df3d7
+  cn-north-1: ami-01993b4213b4bffb5
+  cn-northwest-1: ami-01d4e30d4d4952d0f
+  us-gov-west: ami-8fa6f3ee
+  us-gov-east: ami-0c19f97d
+  ap-northeast-2: ami-0df5bf8255e3a317f
+  ap-southeast-2: ami-06fa8e0449087ac9b
+  eu-west-2: ami-0c3f128b7298d29b9
+  us-east-2: ami-0bfd7d13d424429f7
+  us-west-2: ami-05b4756ea95a5d5a7
+  ap-northeast-3: ami-0b044db7604e31b93
+  eu-west-3: ami-06aaed47c3fb20f64
+
+amis_2004:
+  af-south-1: ami-033b88f80930a0f7a
+  ap-east-1: ami-9ccc8aed
+  ap-northeast-1: ami-0c1ac8728ef7f87a4
+  ap-south-1: ami-0c5b1a88222ac79cb
+  ap-southeast-1: ami-0b8cf0f359b1335e1
+  ca-central-1: ami-08a6203f59f9df866
+  eu-central-1: ami-05c26ae4789875080
+  eu-north-1: ami-0d4e2b57f569e9daa
+  eu-south-1: ami-0b74d52f736d963d1
+  eu-west-1: ami-0dad359ff462124ca
+  me-south-1: ami-09cbb7fde4a0edad0
+  sa-east-1: ami-001c16a3a4f5d85f1
+  us-east-1: ami-068663a3c619dd892
+  us-west-1: ami-075fd582acf0c0128
+  cn-north-1: ami-0bdcf50b6cefb4366
+  cn-northwest-1: ami-04effa29f4d91541f
+  us-gov-west-1: ami-8899aae9
+  us-gov-east-1: ami-9720cce6
+  ap-northeast-2: ami-0de407404c33d1671
+  ap-southeast-2: ami-0a1a4d97d4af3009b
+  eu-west-2: ami-0917237b4e71c5759
+  us-east-2: ami-0e84e211558a022c0
+  us-west-2: ami-09dd2e08d601bff67
+  ap-northeast-3: ami-0e319adbbd61f8b6f
+  eu-west-3: ami-0e60c6afa19d896ee
+
+ami_ids:
+  ubuntu: "{{ amis_2004 }}"

@@ -1,0 +1,33 @@
+---
+- name: Setting the facts
+  set_fact:
+    provisioned_volumes: []
+    provisioned_mounts: []
+
+- name: Creating EFS file systems
+  delegate_to: localhost
+  efs:
+    name: "{{ volume.provision_params.name }}"
+    targets:
+      - subnet_id: "{{ main_vpc_subnet_id }}"
+        security_groups: "{{ security_group_ids }}"
+    state: present
+    wait: yes
+    purge_tags: yes
+    region: "{{ volume.provision_params.get('region') | default(region) }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    tags:
+      Name: "{{ volume.provision_params.name }}"
+      Group: "{{ volume.group | default(omit) }}"
+      Purpose: file-storage
+      Environment: "{{ stage }}"
+  register: efs_filesystem
+
+- name: Mounting the filesystem to your instances
+  include_tasks: mount-volume.yml
+  loop: "{{ volume.provision_params.groups }}"
+  loop_control:
+    loop_var: target_group
+  when: volume.provision_params.mount and inventory_hostname in groups.get(target_group, {})

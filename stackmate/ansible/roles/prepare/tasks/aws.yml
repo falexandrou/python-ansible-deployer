@@ -1,0 +1,12 @@
+---
+- name: Get the current AWS identity information
+  aws_caller_info:
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: aws_user_info
+
+- name: Verifying connectivity to AWS
+  fail:
+    msg: We were unable to connect to the AWS API with the credentials you provided
+  when: aws_user_info is not success

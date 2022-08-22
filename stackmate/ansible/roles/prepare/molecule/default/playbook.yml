@@ -1,0 +1,37 @@
+---
+- name: Converge
+  hosts: localhost
+  gather_facts: no
+
+  roles:
+    - role: prepare
+
+  post_tasks:
+    - name: Destroy GitHub SSH key
+      github_key:
+        name: "{{ github_deploy_key_name }}"
+        token: "{{ providers.github.token }}"
+        state: absent
+        force: yes
+
+    - name: Storing output to a json file
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      delegate_to: localhost
+
+  vars:
+    public_key: "{{ lookup('file', '../../../../../../tests/ssh-keys/stackmate-sample-key.pub') }}"
+    provider: aws
+    providers:
+      aws:
+        access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+        secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+        token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+      github:
+        access_key: "{{ lookup('env', 'STACKMATE_GITHUB_ID') }}"
+        secret: "{{ lookup('env', 'STACKMATE_GITHUB_SECRET') }}"
+        token: "{{ lookup('env', 'STACKMATE_GITHUB_TOKEN') }}"
+    scm: github
+    repository: git@github.com:falexandrou/stackmate-cli.git

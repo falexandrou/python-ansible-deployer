@@ -1,0 +1,13 @@
+---
+- name: Install NFS mount utility
+  become: yes
+  apt:
+    pkg: "{{ nfs_packages }}"
+    state: present
+  when: ansible_os_family | lower == 'debian'
+  register: install_nfs_mount_util
+  until: install_nfs_mount_util is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock

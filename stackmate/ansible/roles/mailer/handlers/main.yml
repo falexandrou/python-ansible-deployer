@@ -1,0 +1,21 @@
+---
+# handlers file for mailer
+- name: restart postfix
+  command: /bin/true
+  notify:
+    - remove pid
+    - restart service
+
+- name: remove pid
+  become: yes
+  file:
+    path: "/home/stackmate/postfix/pid/master.pid"
+    state: absent
+  when: is_docker_guest
+
+- name: restart service
+  become: true
+  service:
+    name: postfix
+    state: restarted
+  when: service_default_state | default('started') == 'started'

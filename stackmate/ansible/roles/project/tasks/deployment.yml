@@ -1,0 +1,63 @@
+---
+- name: Ensure the file structure required is in place
+  include_tasks: setup.yml
+
+- name: Setting the application release directory
+  set_fact:
+    git_ssh_command: "ssh -o IdentityFile={{ private_key }} -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+
+- name: Setting the application release directory
+  set_fact:
+    release_path: "{{ app_dir_releases }}/{{ lookup('pipe', 'date -u +%Y%m%d%H%M%S') }}"
+    removed_releases: []
+
+- name: Setting the release path
+  set_fact:
+    release_path: "{{ release_path }}/{{ releasedir_prefix }}"
+  when: releasedir_prefix | default(False)
+
+- name: Creating the directory for the new release
+  become: yes
+  file:
+    state: directory
+    path: "{{ release_path }}"
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+    recurse: yes
+
+- name: Updating the application's source code
+  include_tasks: source.yml
+
+- name: Taking care of shared directories
+  include_tasks: shared.yml
+
+- name: Running the application release pipeline
+  include_tasks: pipeline.yml
+  with_dict: "{{ pipeline | default({}) }}"
+  when: not step.key == 'after'
+  loop_control:
+    loop_var: step
+
+- name: Syncing directories with Elastic Storage buckets
+  include_tasks: sync.yml
+  when: statics | default([])
+
+- name: Switching the symlink to the new release
+  file:
+    path: "{{ app_dir_current }}"
+    src: "{{ release_path }}"
+    state: link
+    force: yes
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+
+- name: Running the post-release pipeline
+  include_tasks: pipeline.yml
+  with_dict: "{{ pipeline.after | default({}) }}"
+  when: pipeline.get('after') | default({})
+  loop_control:
+    loop_var: step
+
+- name: Marking the deployment as successful
+  set_fact:
+    release_success: yes

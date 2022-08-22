@@ -1,0 +1,71 @@
+---
+provider:
+domain:
+stage:
+region:
+flavor: instances
+deployment_path: /var/www/application
+deployment_user: stackmate
+public_release_path: "{{ deployment_path }}/current"
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+store_state: yes
+
+profile_script: ~/.profile
+system_profile_script: /etc/profile
+
+# Systemd configurations
+configurations:
+  default_config: &default_config
+    after: syslog.target network.target
+    requires: syslog.target network.target
+    systemd_user: stackmate
+    systemd_group: stackmate
+    env_file: /etc/stackmate.env
+    kill_mode: process
+
+  sidekiq:
+    <<: *default_config
+    process_type: simple
+    description: Sidekiq efficient background processing service
+    # Recommended environment variables
+    #
+    #   MALLOC_ARENA_MAX: 2
+    #   SIDEKIQ_LOG_FILE: /var/log/sidekiq.log
+
+  resque:
+    <<: *default_config
+    description: Resque job queue service
+    process_type: simple
+    environment: {}
+
+  celery:
+    <<: *default_config
+    process_type: forking
+    description: Celery Distributed Task Queue service
+    # Recommended environment variables
+    #
+    # CELERYD_NODES: 4
+    # CELERYD_PID_FILE: /tmp/celery.pid
+    # CELERYD_LOG_FILE: /var/log/celery.log
+    # CELERYD_LOG_LEVEL: INFO
+    # CELERYD_OPTS: ''
+
+  celerybeat:
+    <<: *default_config
+    process_type: simple
+    description: Celery Beat Periodic Tasks
+    # Recommended environment variables
+    #
+    # CELERYBEAT_PID_FILE: /tmp/celery-beat.pid
+    # CELERYBEAT_LOG_FILE: /var/log/celery-beat.log
+    # CELERYBEAT_LOG_LEVEL: INFO
+
+
+  runworker:
+    <<: *default_config
+    description: Worker runner service
+    process_type: simple

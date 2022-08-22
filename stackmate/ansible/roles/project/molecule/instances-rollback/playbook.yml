@@ -1,0 +1,88 @@
+---
+- name: Converge
+  hosts: all
+  roles:
+    - role: project
+
+  pre_tasks:
+    - name: Creating the mock previous releases
+      become: yes
+      file:
+        path: "/var/www/djangoapp/releases/{{ releasedate }}"
+        state: directory
+        owner: "{{ deployment_user }}"
+        group: "{{ deployment_group }}"
+        recurse: yes
+      loop:
+        - "20200122011700"  # <- supposedly the current release
+        - "20200115113000"  # <- this is going to be the target release
+        - "20200113103000"
+        - "20200105103000"
+        - "20200102103000"
+        # these should be deleted
+        - "20191219103000"
+        - "20191214103000"
+        - "20191212103000"
+        - "20191210103000"
+      loop_control:
+        loop_var: releasedate
+      register: mock_release_dirs
+
+    - name: Linking current to the latest release
+      file:
+        path: /var/www/djangoapp/current
+        src: /var/www/djangoapp/releases/20200122011700
+        state: link
+        force: yes
+        owner: "{{ deployment_user }}"
+        group: "{{ deployment_group }}"
+
+  post_tasks:
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    framework: django
+    scm: github
+    github_deploy_key_name: molecule-test-key
+    public_key_filename: ../../../../../../tests/ssh-keys/stackmate-sample-key.pub
+    private_key_filename: ../../../../../../tests/ssh-keys/stackmate-sample-key
+    public_key: "{{ lookup('file', public_key_filename) }}"
+    repository: "git@github.com:stackmate-io/sample-app-django3.git"
+    reference: 0b7fc125b2b00efeff1cc8fb5d5d6ee31377902a
+    deployment_path: /var/www/djangoapp
+    operation: rollback
+    providers:
+      aws:
+        access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+        secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+      github:
+        access_key: "{{ lookup('env', 'STACKMATE_GITHUB_ID') }}"
+        secret: "{{ lookup('env', 'STACKMATE_GITHUB_SECRET') }}"
+        token: "{{ lookup('env', 'STACKMATE_GITHUB_TOKEN') }}"
+
+    daemons:
+      application:
+        - nginx
+        - gunicorn
+
+    appconfigs:
+      - django3app/settings.py
+
+    pipeline:
+      build:
+        # this pipeline is tailored so that the playbook just runs
+        - pip3 install Django==3.0.2
+        - python3 manage.py buildapp
+        - python3 manage.py prepareapp
+      db:migrate:
+        - python3 manage.py supercommand
+      db:rollback:
+        - echo 'rolling back'
+      restart: []
+      after: []

@@ -1,0 +1,35 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: docker
+lint:
+  name: yamllint
+platforms:
+  - name: instance-caches-role-memcached
+    image: stackmate/stackmate-base:0.2
+    command: ${MOLECULE_DOCKER_COMMAND:-"sleep infinity"}
+    pre_build_image: true
+    groups:
+      - application
+      - provisionables
+provisioner:
+  name: ansible
+  lint:
+    name: ansible-lint
+  inventory:
+    host_vars:
+      instance:
+        ansible_user: stackmate
+verifier:
+  name: testinfra
+  lint:
+    name: flake8
+scenario:
+  name: aws-memcached-elasticache
+  test_sequence:
+    - destroy
+    - create
+    - converge
+    - lint
+    - verify

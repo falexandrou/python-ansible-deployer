@@ -1,0 +1,24 @@
+---
+- name: Setting up the variables to append the created resources to
+  set_fact:
+    provision_items: "{{ provisions | default([]) + modifications | default([]) }}"
+    provision_results: []
+    termination_results: []
+
+- name: Provisioning job schedules
+  block:
+    - name: Provisioning the crontab
+      include_tasks: crontab/provisions.yml
+      loop: "{{ provision_items }}"
+      when: inventory_hostname in groups.get(item.group, {})
+
+    - name: Removing the crontab
+      include_tasks: crontab/terminations.yml
+      loop: "{{ terminations | default([]) }}"
+      when: inventory_hostname in groups.get(item.group, {})
+  when: flavor == 'instances'
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_jobschedules_state ] }}"
+  when: store_state

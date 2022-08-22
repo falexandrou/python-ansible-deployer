@@ -1,0 +1,12 @@
+---
+- name: Fetching information regarding the DNS records
+  delegate_to: localhost
+  route53_info:
+    max_items: '100'
+    query: record_sets
+    hosted_zone_id: "{{ hosted_zone_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: dns_records

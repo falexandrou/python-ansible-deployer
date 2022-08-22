@@ -1,0 +1,50 @@
+---
+refernce:
+reason:
+providers:
+  slack:
+    secret: "{{ lookup('env', 'STACKMATE_SLACK_TOKEN') }}"
+  email:
+    host: smtp.sendgrid.net
+    port: 587
+    access_key: apikey
+    secret: "{{ lookup('env', 'STACKMATE_SENDGRID_TOKEN') }}"
+
+email_from: no-reply@stackmate.io
+email_from_name: Stackmate Deployments
+support_email: support@stackmate.io
+commit: {}
+status_emojis:
+  started: []
+  success: &success_emojis
+    - ":confetti_ball:"
+    - ":ship:"
+    - ":shipit:"
+    - ":passenger_ship:"
+    - ":metal:"
+    - ":rocket:"
+    - ":rocket:"
+  failure: &failed_emojis
+    - ":cry:"
+    - ":disappointed:"
+    - ":sweat:"
+    - ":thinking_face:"
+  cancelled:
+    - ":thinking_face:"
+    - ":expressionless:"
+    - ":neutral_face:"
+status_colors:
+  started: []
+  success: &success_colors
+    - "#008000"
+  finished:
+    - *success_colors
+  failure: &failed_colors
+    - "#FF0000"
+  cancelled:
+    - "#999999"
+
+operation: deployment
+notifications: {}
+# by default treat the deployment as successful
+deployment_status: success

@@ -1,0 +1,44 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: yes
+  roles:
+    - role: mailer
+
+  post_tasks:
+    - name: Terminating created resources
+      include_tasks: ../../tasks/aws-ses/terminations.yml
+      loop: "{{ provisions }}"
+
+    - name: Terminating created resources
+      include_tasks: ../../tasks/aws-ses/after-termination.yml
+
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    provider: aws
+    is_docker_guest: yes
+    region: eu-central-1
+    domain: permanent-molecule-test.myappis.live
+    hosted_zone_id: Z07543562ESYKGPNP3TXF
+
+    provisions:
+      - id: service-mailer-ses-mailer
+        provision_params:
+          name: mailer1
+          inbound: true
+          domain: permanent-molecule-test.myappis.live
+          faults: faults@permanent-molecule-test.myappis.live
+          deliveries: deliveries@permanent-molecule-test.myappis.live
+          complaints: complaints@permanent-molecule-test.myappis.live
+          emails:
+            - fotis@permanent-molecule-test.myappis.live
+
+    modifications: []
+    terminations: []

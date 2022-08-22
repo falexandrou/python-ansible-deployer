@@ -1,0 +1,92 @@
+---
+# Create a keypair
+- name: Creating an EC2 Keypair to be used with the instances
+  delegate_to: localhost
+  ec2_key:
+    state: present
+    name: "{{ keypair_name }}"
+    key_material: "{{ public_key }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    region: "{{ region }}"
+  register: keypair
+
+# Creating the security group to be attached to new instances
+- name: Getting the IP for Stackmate.io
+  delegate_to: localhost
+  command: 'dig -4 TXT +short o-o.myaddr.l.google.com @ns1.google.com'
+  register: stackmate_ip
+  no_log: yes
+  when: true
+
+- name: Setting up the security group to allow Stackmate to access via SSH
+  delegate_to: localhost
+  ec2_group:
+    name: "{{ stackmate_ssh_security_group }}"
+    description: Allow SSH access to Stackmate
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    purge_rules: yes
+    rules:
+      - proto: tcp
+        from_port: "{{ ssh_port }}"
+        to_port: "{{ ssh_port }}"
+        cidr_ip: "{{ stackmate_ip.stdout | replace('\"', '') }}/32"
+        rule_desc: Allow SSH access to Stackmate
+    tags:
+      Name: "{{ stackmate_ssh_security_group }}"
+  register: stackmate_sg
+  when: stackmate_ip is success
+  tags:
+    - stackmate-enabler
+
+- name: Determining the VPC CIDR to use
+  delegate_to: localhost
+  ec2_vpc_net_info:
+    vpc_ids: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+  register: vpc_info
+
+- name: Setting the VPC CIDR to allow access from
+  set_fact:
+    vpc_info: "{{ vpc_info.vpcs | first }}"
+
+- name: Creating the security group for the application instances
+  delegate_to: localhost
+  ec2_group:
+    name: "{{ application_security_group }}"
+    description: Allow incoming connections to the application instances from within the VPC
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    purge_rules: yes
+    purge_tags: yes
+    # inbound rules, by default, all outbound traffic is allowed
+    rules:
+      - proto: tcp
+        from_port: 80
+        to_port: 80
+        cidr_ip: 0.0.0.0/0
+        rule_desc: Allow all HTTP connections
+      - proto: tcp
+        from_port: 443
+        to_port: 443
+        cidr_ip: 0.0.0.0/0
+        rule_desc: Allow all HTTPS connections
+      - proto: all
+        from_port: 0
+        to_port: 65535
+        cidr_ip: "{{ vpc_info.cidr_block }}"
+        rule_desc: VPC incoming connections
+    tags:
+      Name: "{{ application_security_group }}"
+  register: application_sg

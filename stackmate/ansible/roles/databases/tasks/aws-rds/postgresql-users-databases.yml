@@ -1,0 +1,66 @@
+---
+- name: Setting the non root credentials
+  set_fact:
+    creds: "{{ dbentry.provision_params.get('credentials', {}) }}"
+
+- name: Creating the database user
+  run_once: yes
+  become: yes
+  postgresql_user:
+    name: "{{ creds.username }}"
+    password: "{{ creds.password }}"
+    state: present
+    expires: infinity
+    no_password_changes: yes
+    role_attr_flags: CREATEROLE,CREATEDB,LOGIN
+    login_db: postgres
+    login_host: "{{ deployed_output.endpoint.address }}"
+    login_port: "{{ dbentry.provision_params.port | default(5432) }}"
+    login_user: "{{ dbentry.provision_params.root_credentials.username }}"
+    login_password: "{{ dbentry.provision_params.root_credentials.password }}"
+    login_unix_socket: ''
+  when: deployed_output.changed and creds.get('username') and creds.get('password')
+  register: postgres_user_created
+  tags:
+    - skip_ansible_lint
+
+- name: Creating the databases
+  run_once: yes
+  postgresql_db:
+    name: "{{ database }}"
+    encoding: UTF8
+    lc_collate: "en_US.UTF-8"
+    lc_ctype: "en_US.UTF-8"
+    state: present
+    login_host: "{{ deployed_output.endpoint.address }}"
+    login_port: "{{ dbentry.provision_params.port }}"
+    login_user: "{{ dbentry.provision_params.root_credentials.username }}"
+    login_password: "{{ dbentry.provision_params.root_credentials.password }}"
+    login_unix_socket: ''
+  when: deployed_output.changed
+  register: postgres_database_created
+  loop: "{{ dbentry.provision_params.get('databases') | default([]) }}"
+  loop_control:
+    loop_var: database
+  tags:
+    - skip_ansible_lint
+
+- name: Making sure the new user has all the rights
+  run_once: yes
+  postgresql_privs:
+    db: "{{ database }}"
+    role: "{{ creds.username }}"
+    objs: ALL_IN_SCHEMA
+    privs: ALL
+    login_host: "{{ deployed_output.endpoint.address }}"
+    login_port: "{{ deployed_output.endpoint.port }}"
+    login_user: "{{ dbentry.provision_params.root_credentials.username }}"
+    login_password: "{{ dbentry.provision_params.root_credentials.password }}"
+    login_unix_socket: ''
+  when: postgres_database_created.changed
+  loop: "{{ dbentry.provision_params.get('databases') | default([]) }}"
+  register: postgres_privs_assigned
+  loop_control:
+    loop_var: database
+  tags:
+    - skip_ansible_lint

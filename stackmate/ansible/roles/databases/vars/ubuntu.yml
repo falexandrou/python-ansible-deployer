@@ -1,0 +1,16 @@
+---
+client_packages:
+  mysql:
+    "5.7": &mysqlpackages
+      - libmysqlclient-dev
+      - mysql-client
+      - mysql-common
+  postgres:
+    "10.10": &pgpackages
+      - postgresql-all
+
+pip_client_packages:
+  mysql:
+    - PyMySQL
+  postgres:
+    - psycopg2

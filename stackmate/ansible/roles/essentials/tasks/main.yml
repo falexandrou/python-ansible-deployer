@@ -1,0 +1,9 @@
+---
+- name: Provisioning your instances
+  import_tasks: provision-instances.yml
+  when: flavor == 'instances' and inventory_hostname in groups.get('provisionables', {})
+
+- name: Setting the state for Stackmate
+  set_fact:
+    stackmate_state: "{{ stackmate_state | default([])  + [ vars | get_stackmate_essentials_state ] }}"
+  when: store_state

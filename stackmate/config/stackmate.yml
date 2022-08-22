@@ -1,0 +1,827 @@
+---
+# This should be copied from the deployer directly
+# The frameworks available
+frameworks: &frameworks
+  - django
+  - python
+  - rails
+  - sinatra
+  - ruby
+  - express.js
+  - nodejs
+  - static
+  - react.js
+  - angular.js
+
+# The providers available
+cloud_providers: &cloud_providers
+  - aws
+
+scm_providers: &scm_providers
+  - github
+
+# Default service attributes
+default_service: &default_service
+  name:
+    required: true
+    datatype: str
+  size:
+    required: true
+    datatype: str
+  provider:
+    required: true
+    datatype: str
+    choices: *cloud_providers
+  kind:
+    required: true
+    datatype: str
+  credentials:
+    required: true
+    datatype: dict
+    default: {}
+  root_credentials:
+    required: true
+    datatype: dict
+    default: {}
+  configfiles:
+    required: false
+    datatype: list
+    default: []
+  storage:
+    required: false
+    datatype: int
+    default: 20
+  port:
+    required: false
+    datatype: int
+  environment:
+    required: false
+    datatype: dict
+    default: {}
+    serializable: false
+  links:
+    required: false
+    datatype: list
+    default: []
+    serializable: false
+  reference:
+    required: false
+    datatype: str
+    default: null
+    serializable: true
+
+# Provisionable service attributes
+provisionable_service: &provisionable_service
+  <<: *default_service
+  size:
+    required: true
+    datatype: str
+  storage:
+    required: true
+    datatype: int
+  region:
+    required: true
+    datatype: str
+  dependencies:
+    required: false
+    datatype: list
+    default: []
+    serializable: false
+
+# managed service attributes
+managed_service: &managed_service
+  <<: *default_service
+  region:
+    required: true
+    datatype: str
+
+# utility attributes
+utility_setup: &utility_setup
+  kind:
+    required: true
+    datatype: str
+
+# dependency attributes
+dependency_setup: &dependency_setup
+  kind:
+    required: true
+    datatype: str
+  version:
+    required: true
+    datatype: str
+  configfiles:
+    required: false
+    datatype: list
+    default: []
+  environment:
+    required: false
+    datatype: dict
+    default: {}
+    serializable: false
+  reference:
+    required: false
+    datatype: str
+    default: null
+    serializable: true
+
+
+providers: *cloud_providers
+
+# Versions available for dependencies & services
+versions:
+  mysql:
+    default: &mysql_default '5.7'
+    available: &mysql_versions
+      - '5.7'
+      - '5.6'
+  postgresql:
+    default: &postgresql_default '10.10'
+    available: &postgresql_versions
+      - '10.10'
+      - '10.2'
+  redis:
+    default: &redis_default '5.0.6'
+    available: &redis_versions
+      - '5.0.6'
+      - '5.0.5'
+      - '5.0.4'
+      - '5.0.3'
+      - '5.0.0'
+      - '4.0.10'
+      - '3.2.10'
+      - '3.2.6'
+      - '3.2.4'
+  memcached:
+    default: &memcached_default '1.5.17'
+    available: &memcached_versions
+      - '1.5.17'
+      - '1.5.10'
+      - '1.4.34'
+      - '1.4.33'
+      - '1.4.24'
+      - '1.4.14'
+      - '1.4.5'
+  nginx:
+    default: '1.18'
+    available:
+      - '1.18'
+      - '1.17'
+  nodejs:
+    default: 14.x
+    available:
+      - 15.x
+      - 14.x
+      - 13.x
+      - 12.x
+      - 10.x
+      - 8.x
+  python:
+    default: '3.8'
+    available:
+      - '3.8'
+      - '3.7'
+      - '3.5'
+  puma:
+    default: '4.1.0'
+    available:
+      - latest
+      - '4.3.0'
+      - '4.0.1'
+      - '4.2.1'
+      - '4.2.0'
+      - '4.1.1'
+      - '4.1.0'
+      - '4.0.1'
+  gunicorn:
+    default: '20.0.4'
+    available:
+      - '20.0.4'
+  pm2:
+    default: '4.2.1'
+    available:
+      - '4.2.1'
+  daphne:
+    default: '2.4.1'
+    available:
+      - '2.4.1'
+  ruby:
+    default: '2.7.2'
+    available:
+      - '3.0.0'
+      - '2.7.2'
+      - '2.6.6'
+      - '2.5.7'
+      - '2.4.9'
+      - '2.3.8'
+  sidekiq:
+    default: '6.0.7'
+    choices:
+      - latest
+      - '6.0.7'
+      - '6.0.6'
+      - '6.0.5'
+      - '6.0.4'
+      - '6.0.3'
+      - '6.0.2'
+      - '6.0.1'
+      - '6.0.0'
+      - '5.2.8'
+      - '5.2.7'
+      - '5.2.6'
+      - '5.2.5'
+  resque:
+    default: latest
+    choices:
+      - latest
+      - '2.0.0'
+      - '1.27.4'
+      - '1.25.0'
+      - '1.24.1'
+      - '1.24.0'
+
+default_environment:
+  sidekiq:
+    MALLOC_ARENA_MAX: 2
+  resque:
+    QUEUES: "*"
+
+# Utilities can either be deployed as unique dependencies or managed services
+# Utilities are stateful and can perform operations on the inventory, resource ids,
+# or any other dependency or service they need
+utilities:
+  available:
+    # utilities that can be deployed as dependencies
+    - essentials
+    - configfiles
+    - environment
+    - jobschedules
+    - notifications
+    - ssl
+    - prepare
+    - project
+  managed:
+    # utilities that can be deployed as managed services, by provider
+    aws:
+      - prerequisites
+      - routing
+      - ssl
+    digitalocean:
+      - routing
+  attributes:
+    prepare:
+      <<: *utility_setup
+      scm:
+        required: True
+        datatype: str
+      repository:
+        required: True
+        datatype: str
+    prerequisites:
+      <<: *utility_setup
+      scm:
+        required: True
+        datatype: str
+      domain:
+        required: True
+        datatype: str
+      region:
+        required: true
+        datatype: str
+    configfiles:
+      <<: *utility_setup
+      source:
+        required: True
+        datatype: str
+      target:
+        required: True
+        datatype: str
+      filehash:
+        required: True
+        datatype: str
+      application:
+        required: True
+        default: False
+        datatype: bool
+    environment:
+      <<: *utility_setup
+      export:
+        required: True
+        datatype: str
+      value:
+        required: False
+        datatype: str
+    jobschedules:
+      <<: *utility_setup
+      command:
+        required: True
+        datatype: str
+      frequency:
+        required: True
+        datatype: str
+    notifications:
+      <<: *utility_setup
+      type:
+        required: True
+        datatype: str
+        choices:
+          - email
+          - slack
+      targets:
+        required: True
+        datatype: list
+    ssl:
+      <<: *utility_setup
+      generate:
+        required: true
+        datatype: bool
+        default: true
+      region:
+        required: true
+        datatype: str
+      domains:
+        required: true
+        datatype: list
+        default: []
+      is_cdn_certificate:
+        required: true
+        datatype: bool
+        default: false
+    routing:
+      <<: *utility_setup
+      provider:
+        required: true
+        datatype: str
+        choices: *cloud_providers
+      target_port:
+        required: true
+        datatype: int
+        default: 80
+      target_group:
+        required: true
+        datatype: str
+      target_instances:
+        required: true
+        datatype: list
+        default: []
+      domain:
+        required: true
+        datatype: str
+    project:
+      <<: *provisionable_service
+      framework:
+        required: true
+        datatype: str
+        choices: *frameworks
+      scm:
+        required: true
+        datatype: str
+        choices: *scm_providers
+      provider:
+        required: true
+        datatype: str
+        choices: *cloud_providers
+      github_deploy_key_name:
+        required: true
+        datatype: str
+        default: stakmate-deploy-key
+      repository:
+        required: true
+        datatype: str
+      branch:
+        required: true
+        datatype: str
+        default: main
+      deployment_path:
+        required: true
+        datatype: str
+        default: /var/www/application
+      region:
+        required: true
+        datatype: str
+        default: eu-central-1
+      daemons:
+        required: false
+        datatype: dict
+      statics:
+        required: false
+        datatype: list
+        default: []
+      appconfigs:
+        required: false
+        datatype: list
+        default: []
+      pipeline:
+        required: false
+        datatype: dict
+        default: {}
+
+dependencies:
+  # dependencies that are available for installation in services
+  available:
+    - mysql
+    - nginx
+    - puma
+    - python
+    - redis
+    - ruby
+    - memcached
+    - postgresql
+    - mailer
+    - gunicorn
+    - pm2
+    - nodejs
+    - daphne
+    - sidekiq
+    - resque
+    - celery
+    - celerybeat
+    - runworker
+  # dependencies setup
+  attributes:
+    essentials:
+      public_key:
+        required: true
+        datatype: str
+    nginx:
+      <<: *dependency_setup
+    nodejs:
+      <<: *dependency_setup
+    python:
+      <<: *dependency_setup
+    ruby:
+      <<: *dependency_setup
+      bundler:
+        required: false
+        datatype: str
+        default: 2.2.6
+        choices:
+          - 2.2.6
+          - 2.2.5
+          - 2.2.4
+          - 2.2.3
+          - 2.2.2
+          - 2.2.1
+          - 2.2.0
+          - 2.1.4
+          - 2.1.3
+          - 2.1.2
+          - 2.1.0
+          - 2.0.2
+          - 2.0.1
+          - 1.17.3
+          - 1.17.2
+          - 1.17.1
+          - 1.17.0
+          - 1.16.6
+          - 1.16.5
+          - 1.16.4
+          - 1.16.3
+          - 1.16.2
+          - 1.16.1
+          - 1.16.0
+          - 1.15.4
+          - 1.15.3
+          - 1.15.2
+          - 1.15.1
+          - 1.15.0
+    gunicorn: &appserver_setup
+      <<: *dependency_setup
+      port:
+        required: true
+        datatype: int
+        default: 4000
+      uri:
+        required: true
+        datatype: str
+        default: /
+      appname:
+        required: True
+        datatype: str
+      startcmd:
+        required: False
+        datatype: str
+      reloadcmd:
+        required: False
+        datatype: str
+      stopcmd:
+        required: False
+        datatype: str
+    daphne:
+      <<: *appserver_setup
+    puma:
+      <<: *appserver_setup
+      configfile:
+        required: True
+        datatype: str
+        default: config/puma.rb
+      appname: null
+    pm2:
+      <<: *appserver_setup
+      appname: null
+      configfile:
+        required: True
+        datatype: str
+    sidekiq: &worker_setup
+      <<: *dependency_setup
+      configfile:
+        required: True
+        datatype: str
+        default: config/sidekiq.yml
+      servicename:
+        required: False
+        datatype: str
+        default: sidekiq
+      startcmd:
+        required: False
+        datatype: str
+      reloadcmd:
+        required: False
+        datatype: str
+      stopcmd:
+        required: False
+        datatype: str
+    resque:
+      <<: *worker_setup
+      servicename:
+        required: False
+        datatype: str
+        default: resque
+      configfile:
+        required: True
+        datatype: str
+        default: config/resque.yml
+    celery:
+      <<: *worker_setup
+      version: null
+      servicename:
+        required: False
+        datatype: str
+        default: celery
+      appname:
+        required: True
+        datatype: str
+    celerybeat:
+      <<: *worker_setup
+      version: null
+      servicename:
+        required: False
+        datatype: str
+        default: celerybeat
+      appname:
+        required: True
+        datatype: str
+    runworker:
+      <<: *worker_setup
+      servicename:
+        required: False
+        datatype: str
+        default: null
+      startcmd:
+        required: True
+        datatype: str
+      reloadcmd:
+        required: True
+        datatype: str
+      stopcmd:
+        required: True
+        datatype: str
+
+
+services:
+  available:
+    # services that are available by default
+    - application
+    - worker
+    - backend
+  standalone:
+    # services that can be deployed as standalone backend instances
+    - mysql
+    - postgresql
+    - redis
+    - memcached
+    - mailer
+  managed:
+    # services that are managed, indexed by provider
+    aws:
+      - mysql
+      - postgresql
+      - redis
+      - memcached
+      - mailer
+      - cdn
+      - elasticstorage
+      - routing
+      - ssl
+      - volumes
+    digitalocean:
+      - postgresql
+      - elasticstorage
+      - routing
+  replacement_triggers:
+    # attributes that trigger a service replacement if changed
+    default:
+      - size
+      - region
+      - provider
+      - storage
+    cdn:
+      - origins
+  attributes:
+    # service model attributes
+    application: &core_service
+      <<: *provisionable_service
+      nodes:
+        required: true
+        datatype: int
+        default: 1
+    worker:
+      <<: *core_service
+    backend:
+      <<: *core_service
+    mysql:
+      <<: *managed_service
+      version:
+        required: true
+        datatype: str
+        default: *mysql_default
+        choices: *mysql_versions
+      databases:
+        required: true
+        datatype: list
+      credentials:
+        required: True
+        datatype: dict
+      root_credentials:
+        required: True
+        datatype: dict
+      port:
+        required: true
+        datatype: int
+        default: 3306
+      engine:
+        required: true
+        datatype: str
+        default: mysql
+        choices:
+          - aurora
+          - aurora-mysql
+          - mariadb
+          - mysql
+    postgresql:
+      <<: *managed_service
+      version:
+        required: true
+        datatype: str
+        default: *postgresql_default
+        choices: *postgresql_versions
+      credentials:
+        required: True
+        datatype: dict
+      root_credentials:
+        required: True
+        datatype: dict
+      databases:
+        required: True
+        datatype: list
+      port:
+        required: true
+        datatype: int
+        default: 5432
+      engine:
+        required: true
+        datatype: str
+        default: postgres
+        choices:
+          - aurora-postgresql
+          - postgres
+    redis:
+      <<: *managed_service
+      storage: null # storage is already provisioned in cache servers
+      version:
+        required: true
+        datatype: str
+        default: *redis_default
+        choices: *redis_versions
+      port:
+        required: true
+        datatype: int
+        default: 6379
+    memcached:
+      <<: *managed_service
+      storage: null # storage is already provisioned in cache servers
+      version:
+        required: true
+        datatype: str
+        default: *memcached_default
+        choices: *memcached_versions
+      port:
+        required: true
+        datatype: int
+        default: 11211
+      nodes:
+        required: true
+        datatype: int
+        default: 1
+    cdn:
+      name:
+        required: true
+        datatype: str
+      provider:
+        required: true
+        datatype: str
+        choices: *cloud_providers
+      kind:
+        required: true
+        datatype: str
+      region:
+        required: true
+        datatype: str
+      origins:
+        required: true
+        datatype: list
+      environment:
+        required: false
+        datatype: dict
+        default: {}
+        serializable: false
+    volumes:
+      name:
+        required: true
+        datatype: str
+      mount:
+        required: true
+        datatype: str
+      groups:
+        required: true
+        datatype: list
+    elasticstorage:
+      name:
+        required: true
+        datatype: str
+      provider:
+        required: true
+        datatype: str
+        choices: *cloud_providers
+      kind:
+        required: true
+        datatype: str
+      region:
+        required: true
+        datatype: str
+      bucket:
+        required: true
+        datatype: str
+      public:
+        required: true
+        datatype: bool
+      website:
+        required: true
+        datatype: bool
+        default: false
+      cdn:
+        required: true
+        datatype: bool
+        default: false
+      domain:
+        required: false
+        datatype: str
+      directory_index:
+        required: false
+        datatype: str
+        default: index.html
+      error_page:
+        required: false
+        datatype: str
+        default: errors/error.html
+      environment:
+        required: false
+        datatype: dict
+        default: {}
+        serializable: false
+    mailer:
+      <<: *managed_service
+      storage: null
+      size: null
+      root_credentials: null
+      credentials: null
+      port: null
+      name:
+        required: true
+        datatype: str
+      inbound:
+        required: false
+        datatype: bool
+        default: false
+      domain:
+        required: true
+        datatype: str
+      faults:
+        required: false
+        datatype: str
+      deliveries:
+        required: false
+        datatype: str
+      emails:
+        required: true
+        datatype: list
+        default: []

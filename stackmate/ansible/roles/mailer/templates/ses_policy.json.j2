@@ -1,0 +1,18 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "{{ iam_user.result.Arn }}"
+            },
+            "Action": [
+                "ses:SendEmail",
+                "ses:SendTemplatedEmail",
+                "ses:SendRawEmail",
+                "ses:SendBulkTemplatedEmail"
+            ],
+            "Resource": "{{ ses_domain.identity_arn }}"
+        }
+    ]
+}

@@ -1,0 +1,51 @@
+---
+- name: Setting the version
+  set_fact:
+    version: "{{ prov.provision_params.version }}"
+
+- name: Adding Nodesource apt key
+  become: yes
+  apt_key:
+    url: https://deb.nodesource.com/gpgkey/nodesource.gpg.key
+
+- name: Adding NodeSource repositories
+  become: yes
+  apt_repository:
+    repo: "{{ item }}"
+    state: present
+  loop:
+    - "deb https://deb.nodesource.com/node_{{ version|regex_replace('.[0-9]+.[0-9]+$', '.x') }} {{ ansible_distribution_release }} main"
+    - "deb-src https://deb.nodesource.com/node_{{ version|regex_replace('.[0-9]+.[0-9]+$', '.x') }} {{ ansible_distribution_release }} main"
+  register: nodesource_repository
+  until: nodesource_repository is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+  notify: refresh apt cache
+
+- name: Installing Node.js and NPM
+  become: yes
+  apt:
+    name: nodejs={{ version|regex_replace('x', '') }}*
+    state: present
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+  register: node_installation
+  until: node_installation is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock
+
+- name: Installing node database interfaces
+  become: yes
+  apt:
+    name: "{{ node_apt_packages }}"
+    state: present
+    # cache_valid_time: "{{ apt_cache_timeout }}"
+  register: node_db_drivers
+  until: node_db_drivers is succeeded
+  delay: "{{ apt_lock_delay }}"
+  retries: "{{ apt_lock_retries }}"
+  tags:
+    - apt_lock

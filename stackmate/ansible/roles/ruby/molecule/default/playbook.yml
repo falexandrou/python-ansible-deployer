@@ -1,0 +1,22 @@
+---
+- name: Converge
+  hosts: all
+  roles:
+    - role: ruby
+
+  post_tasks:
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    flavor: instances
+    provisions:
+      - id: dependency-application-server-ruby
+        group: application
+        provision_params:
+          version: 2.7.2

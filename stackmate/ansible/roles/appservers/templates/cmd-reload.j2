@@ -1,0 +1,5 @@
+{% if entry.provision_params.kind == 'pm2' %}
+{{executable_path.stdout}} reload all
+{% else %}
+/bin/kill -s HUP $MAINPID
+{% endif %}

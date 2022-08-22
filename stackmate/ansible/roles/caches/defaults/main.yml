@@ -1,0 +1,22 @@
+---
+flavor: instances
+deployment_user: stackmate
+timezone: Etc/UTC
+provider:
+stage:
+vpc_subnet_id:
+providers:
+  aws:
+    access_key: "{{ lookup('env', 'STACKMATE_ACCESS_KEY') }}"
+    secret: "{{ lookup('env', 'STACKMATE_SECRET') }}"
+    token: "{{ lookup('env', 'STACKMATE_STS_TOKEN') }}"
+store_state: yes
+
+# elasticache related variables
+elasticache_subnet_group_name: stackmate-cache-subnet
+stackmate_security_group: stackmate-incoming
+cache_security_group: cache-incoming
+
+apt_cache_timeout: 7200
+apt_lock_retries: 30
+apt_lock_delay: 10

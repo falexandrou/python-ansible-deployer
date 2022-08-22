@@ -1,0 +1,10 @@
+---
+postfix_packages:
+  - postfix
+  - libsasl2-2
+  - libsasl2-dev
+  - libsasl2-modules
+  - libsasl2-modules-sql
+  - sasl2-bin
+  - cyrus-common
+  - cyrus-dev

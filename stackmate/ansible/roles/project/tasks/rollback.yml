@@ -1,0 +1,52 @@
+---
+- name: Checking if we can roll back in this type of project
+  fail:
+    msg: The project does not support roll backs. Please revert the faulty commit and deploy
+  when: flavor != 'instances'
+
+- name: Ensure the file structure required is in place
+  include_tasks: setup.yml
+
+- name: Get all the releases available
+  shell: 'echo `find {{ app_dir_releases }} -type d -maxdepth 1 -mindepth 1 | sort`'
+  register: current_releases
+  changed_when: current_releases.rc == 0
+  tags:
+    - skip_ansible_lint
+
+- name: Get the release to roll back to
+  set_fact:
+    target_release: "{{ current_releases.stdout | splitstring(' ') | get_rollback_target_release }}"
+    removed_releases: []
+
+- name: Checking if we can roll back
+  fail:
+    msg: "We can't roll back because there isn't an available release to roll back to"
+  when: not target_release
+
+- name: Running the application release pipeline
+  include_tasks: pipeline.yml
+  with_dict: "{{ pipeline | default({}) }}"
+  loop_control:
+    loop_var: step
+  when: not step.key == 'after'
+
+- name: Switching the symlink to the previous release
+  file:
+    path: "{{ app_dir_current }}"
+    src: "{{ target_release }}"
+    state: link
+    force: yes
+    owner: "{{ deployment_user }}"
+    group: "{{ deployment_group }}"
+
+- name: Running the post-release pipeline
+  include_tasks: pipeline.yml
+  with_dict: "{{ pipeline.after | default({}) }}"
+  when: pipeline.get('after') is defined
+  loop_control:
+    loop_var: step
+
+- name: Marking the rollback as successful
+  set_fact:
+    release_success: yes

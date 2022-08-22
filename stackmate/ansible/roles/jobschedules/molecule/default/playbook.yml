@@ -1,0 +1,47 @@
+---
+- name: Converge
+  hosts: all
+
+  roles:
+    - role: jobschedules
+
+  pre_tasks:
+    - name: Setting up the prerequisites for terminating Cloudfront distributions
+      include_tasks: ../../tasks/crontab/provisions.yml
+      loop: "{{ terminations }}"
+
+  post_tasks:
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    provisions:
+      - id: utility-jobschedules-abc123
+        provision_params:
+          kind: jobschedules
+          unique: false
+          command: "/bin/true"
+          frequency: "*/1 * * * *"
+        group: application
+
+      - id: utility-jobschedules-abc321
+        provision_params:
+          kind: jobschedules
+          unique: false
+          command: "/bin/false"
+          frequency: "*/5 * * * *"
+        group: application
+    modifications: []
+    terminations:
+      - id: utility-jobschedules-abc456
+        provision_params:
+          kind: jobschedules
+          unique: false
+          command: "/bin/something"
+          frequency: "*/30 * * * *"
+        group: application

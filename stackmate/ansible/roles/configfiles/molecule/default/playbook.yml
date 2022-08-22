@@ -1,0 +1,60 @@
+---
+- name: Converge
+  hosts: all
+  pre_tasks:
+    - name: Creating the modifiable files directory
+      become: yes
+      file:
+        path: "/opt/someotherdirectory"
+        state: directory
+        recurse: yes
+
+    - name: Copying a file to be modified
+      become: yes
+      copy:
+        content: "some content to be modified"
+        dest: /opt/someotherdirectory/modifiable.txt
+
+    - name: Create a file to be deleted
+      become: yes
+      copy:
+        content: "somecontent to be deleted"
+        dest: /opt/removable.txt
+
+  roles:
+    - role: configfiles
+
+  post_tasks:
+    - name: Storing output to a json file
+      delegate_to: localhost
+      copy:
+        content: "{{ vars | to_nice_json }}"
+        dest: "{{ playbook_dir }}/provisioning-output.json"
+      become: false
+      no_log: yes
+
+  vars:
+    provisions:
+      - id: utility-configfiles-abc123
+        provision_params:
+          kind: configfiles
+          source: "{{ playbook_dir }}/files/newfile.txt"
+          target: /opt/some/other/directory/thenewfile.txt
+          filehash: def123abc
+        group: application
+    modifications:
+      - id: utility-configfiles-abc234
+        provision_params:
+          kind: configfiles
+          source: "{{ playbook_dir }}/files/modifiable.txt"
+          target: /opt/someotherdirectory/modifiable.txt
+          filehash: 98865aaabbb234
+        group: application
+    terminations:
+      - id: utility-configfiles-abc456
+        provision_params:
+          kind: configfiles
+          source: "{{ playbook_dir }}/files/modifiable.txt"
+          target: "/opt/removable.txt"
+          filehash: abc123
+        group: application

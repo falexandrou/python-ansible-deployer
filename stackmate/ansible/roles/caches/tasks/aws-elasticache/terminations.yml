@@ -1,0 +1,16 @@
+---
+- name: "Removing the {{ item.provision_params.kind }} cache service"
+  delegate_to: localhost
+  elasticache:
+    name: "{{ item.provision_params.name }}"
+    state: absent
+    region: "{{ region }}"
+    aws_access_key: "{{ providers.aws.access_key }}"
+    aws_secret_key: "{{ providers.aws.secret }}"
+    security_token: "{{ providers.aws.token }}"
+    wait: yes
+  register: terminated_output
+
+- name: Setting the facts for the recently terminated instances
+  set_fact:
+    termination_results: "{{ termination_results + [terminated_output.elasticache.data] }}"
