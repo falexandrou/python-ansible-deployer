@@ -3,7 +3,7 @@
 Some time ago, I tried to launch a SaaS business that used a friendly UI to launch infrastructure on AWS. Being a developer for nearly 20 years at the time, I completely neglected the "business" part and went crazy on the "SaaS" part.
 
 This repository hosts the deployer app that powered the SaaS app, built in Python and Ansible and does the following:
-- Deploys AWS Infrastructure. Currently supports
+- Deploys AWS Infrastructure with Ansible. Currently supports
   - RDS databases
   - EC2 Instances
   - S3 buckets
@@ -12,6 +12,7 @@ This repository hosts the deployer app that powered the SaaS app, built in Pytho
   - NFS storage and more...
 - Adds state support to Ansible
 - Provides preview subdomains on `myappis.live`
+- Ansible roles can be found [here](stackmate/ansible/roles)
 
 
 # Current status of the project
